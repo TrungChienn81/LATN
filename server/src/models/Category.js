@@ -27,7 +27,8 @@ const categorySchema = new Schema({
         type: String
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'Categories'
 });
 
 // Có thể thêm index cho slug để tìm kiếm nhanh hơn

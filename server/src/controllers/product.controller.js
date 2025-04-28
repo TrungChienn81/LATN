@@ -121,35 +121,131 @@ exports.getProductById = async (req, res) => {
 // @route   PUT /api/products/:id
 // @access  Private (Seller owning product)
 exports.updateProduct = async (req, res) => {
-    // TODO:
-    // 1. Lấy productId từ req.params.id
-    // 2. Lấy userId từ req.user (middleware)
-    // 3. Validate productId
-    // 4. Tìm sản phẩm bằng findById
-    // 5. Kiểm tra sản phẩm có tồn tại không
-    // 6. Kiểm tra xem user có phải là chủ shop của sản phẩm không (product.shopId so với shop của user)
-    // 7. Lấy dữ liệu cần cập nhật từ req.body
-    // 8. Cập nhật slug nếu name thay đổi
-    // 9. Dùng findByIdAndUpdate để cập nhật, nhớ tùy chọn { new: true, runValidators: true }
-    // 10. Xử lý lỗi và trả về response
-    res.status(501).json({ success: false, message: 'Update product not implemented yet' });
+    try {
+        const productId = req.params.id;
+        const loggedInUser = req.user;
+
+        if (!mongoose.Types.ObjectId.isValid(productId)) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'ID sản phẩm không hợp lệ' 
+            });
+        }
+
+        const product = await Product.findById(productId);
+        if (!product) {
+            return res.status(404).json({ 
+                success: false, 
+                message: `Không tìm thấy sản phẩm với ID ${productId}` 
+            });
+        }
+
+        const sellerShop = await Shop.findOne({ ownerId: loggedInUser._id });
+        if (!sellerShop) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Không tìm thấy thông tin gian hàng của bạn.' 
+            });
+        }
+
+        if (product.shopId.toString() !== sellerShop._id.toString()) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Bạn không có quyền cập nhật sản phẩm này.' 
+            });
+        }
+
+        delete req.body.shopId;
+
+        const updatedProduct = await Product.findByIdAndUpdate(
+            productId,
+            req.body,
+            {
+                new: true,
+                runValidators: true
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Cập nhật sản phẩm thành công!',
+            data: updatedProduct
+        });
+
+    } catch (error) {
+        console.error('!!! CATCH BLOCK - Error during product update:', error);
+        if (error.code === 11000) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Slug sản phẩm đã tồn tại.` 
+            });
+        }
+        if (error.name === 'ValidationError') {
+            const messages = Object.values(error.errors).map(val => val.message);
+            return res.status(400).json({ 
+                success: false, 
+                message: messages.join('. ') 
+            });
+        }
+        res.status(500).json({ 
+            success: false, 
+            message: 'Lỗi Server khi cập nhật sản phẩm' 
+        });
+    }
 };
 
 // @desc    Xóa sản phẩm
 // @route   DELETE /api/products/:id
 // @access  Private (Seller owning product or Admin)
 exports.deleteProduct = async (req, res) => {
-    // TODO:
-    // 1. Lấy productId từ req.params.id
-    // 2. Lấy user (userId, role) từ req.user (middleware)
-    // 3. Validate productId
-    // 4. Tìm sản phẩm bằng findById
-    // 5. Kiểm tra sản phẩm có tồn tại không
-    // 6. Kiểm tra quyền:
-    //    - Nếu user là 'admin', cho phép xóa.
-    //    - Nếu user là 'seller', kiểm tra xem user có phải chủ shop của sản phẩm không.
-    //    - Nếu không phải cả hai, từ chối.
-    // 7. Dùng findByIdAndDelete hoặc product.remove() để xóa
-    // 8. Xử lý lỗi và trả về response (status 204 nếu thành công và không có content trả về)
-    res.status(501).json({ success: false, message: 'Delete product not implemented yet' });
+    try {
+        const productId = req.params.id;
+        const loggedInUser = req.user;
+
+        if (!mongoose.Types.ObjectId.isValid(productId)) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'ID sản phẩm không hợp lệ' 
+            });
+        }
+
+        const product = await Product.findById(productId);
+        if (!product) {
+            return res.status(404).json({ 
+                success: false, 
+                message: `Không tìm thấy sản phẩm với ID ${productId}` 
+            });
+        }
+
+        let canDelete = false;
+        if (loggedInUser.role === 'admin') {
+            canDelete = true;
+        } else if (loggedInUser.role === 'seller') {
+            const sellerShop = await Shop.findOne({ ownerId: loggedInUser._id });
+            if (sellerShop && product.shopId.toString() === sellerShop._id.toString()) {
+                canDelete = true;
+            }
+        }
+
+        if (!canDelete) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Bạn không có quyền xóa sản phẩm này.' 
+            });
+        }
+
+        await Product.findByIdAndDelete(productId);
+
+        res.status(204).json({
+            success: true,
+            data: null
+        });
+
+    } catch (error) {
+        console.error('!!! CATCH BLOCK - Error during product delete:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Lỗi Server khi xóa sản phẩm' 
+        });
+    }
 };

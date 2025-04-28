@@ -41,7 +41,8 @@ const reviewSchema = new Schema({
         default: true // Hoặc false nếu mặc định là chờ duyệt
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'Reviews'
 });
 
 // Index để tìm kiếm review nhanh hơn

@@ -95,7 +95,8 @@ const orderSchema = new Schema({
         type: String
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    collection: 'Orders'
 });
 
 orderSchema.index({ orderCode: 1 });

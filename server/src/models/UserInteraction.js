@@ -33,7 +33,8 @@ const userInteractionSchema = new Schema({
         required: true,
         default: Date.now,
         index: true // Rất quan trọng để sắp xếp theo thời gian
-    }
+    },
+    collection: 'UserInteractions'
 });
 
 // Không cần timestamps: true vì đã có trường timestamp riêng

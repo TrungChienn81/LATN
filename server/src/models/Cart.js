@@ -38,7 +38,8 @@ const cartSchema = new Schema({
     },
     items: [cartItemSchema] // Mảng các sản phẩm trong giỏ
 }, {
-    timestamps: true // createdAt và updatedAt cho cả giỏ hàng
+    timestamps: true, // createdAt và updatedAt cho cả giỏ hàng
+    collection: 'Carts'
 });
 
 const Cart = mongoose.model('Cart', cartSchema); // map với collection 'carts'

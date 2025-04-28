@@ -47,7 +47,8 @@ const chatSessionSchema = new Schema({
         default: 'active'
     }
 }, {
-    timestamps: true // createdAt và updatedAt cho cả session
+    timestamps: true, // createdAt và updatedAt cho cả session
+    collection: 'ChatSessions'
 });
 
 const ChatSession = mongoose.model('ChatSession', chatSessionSchema); // map với 'chatsessions'
