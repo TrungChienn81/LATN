@@ -1,0 +1,65 @@
+/* src/components/HeroSlider/HeroSlider.css */
+
+/* Custom navigation buttons */
+.hero-slider-wrapper .slick-prev, 
+.hero-slider-wrapper .slick-next {
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+}
+
+.hero-slider-wrapper .slick-prev {
+  left: 20px;
+}
+
+.hero-slider-wrapper .slick-next {
+  right: 20px;
+}
+
+.hero-slider-wrapper .slick-prev:before,
+.hero-slider-wrapper .slick-next:before {
+  font-size: 40px;
+  opacity: 0.8;
+}
+
+/* Navigation dots styling */
+.hero-slider-wrapper .slick-dots {
+  bottom: 20px;
+}
+
+.hero-slider-wrapper .slick-dots li button:before {
+  color: #fff;
+  opacity: 0.5;
+  font-size: 12px;
+}
+
+.hero-slider-wrapper .slick-dots li.slick-active button:before {
+  opacity: 1;
+  color: #fff;
+}
+
+/* Slide content animation */
+.slide-content {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fadeInUp 0.5s ease forwards;
+}
+
+@keyframes fadeInUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hide arrows on mobile */
+@media (max-width: 768px) {
+  .hero-slider-wrapper .slick-prev,
+  .hero-slider-wrapper .slick-next {
+    display: none !important;
+  }
+  
+  .hero-slider-wrapper .slick-dots {
+    bottom: 10px;
+  }
+}
