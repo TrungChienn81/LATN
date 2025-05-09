@@ -117,3 +117,76 @@ exports.login = async (req, res) => {
         });
     }
 };
+
+// Hàm xử lý đăng ký Admin
+// @desc    Register a new admin user
+// @route   POST /api/auth/register-admin
+// @access  Public (but protected by a secret key)
+exports.registerAdmin = async (req, res) => {
+    try {
+        const {
+            username,
+            email,
+            password,
+            firstName,
+            lastName,
+            adminSecret // Key bí mật để đăng ký admin
+        } = req.body;
+
+        // --- **Validation Input cơ bản** ---
+        if (!username || !email || !password || !firstName || !lastName || !adminSecret) {
+            return res.status(400).json({
+                success: false,
+                message: 'Vui lòng cung cấp đầy đủ thông tin: username, email, password, tên, họ và mã bí mật admin.'
+            });
+        }
+
+        // --- **Kiểm tra Admin Secret Key** ---
+        if (adminSecret !== process.env.ADMIN_REGISTRATION_SECRET) {
+            return res.status(403).json({
+                success: false,
+                message: 'Forbidden: Mã bí mật admin không đúng.'
+            });
+        }
+
+        // Kiểm tra xem email hoặc username đã tồn tại chưa
+        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+        if (existingUser) {
+            let message = '';
+            if (existingUser.email === email) message = 'Email đã tồn tại.';
+            if (existingUser.username === username) message += (message ? ' Username cũng đã tồn tại.' : 'Username đã tồn tại.');
+            return res.status(400).json({ success: false, message: message.trim() });
+        }
+
+        // --- **Hashing Mật khẩu** ---
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // --- **Tạo Admin User mới** ---
+        const newAdmin = await User.create({
+            username,
+            email,
+            password: hashedPassword,
+            firstName,
+            lastName,
+            role: 'admin' // Gán vai trò là 'admin'
+            // phone có thể để trống hoặc thêm vào nếu muốn
+        });
+
+        // --- **Phản hồi thành công** ---
+        // Không trả về token ở đây, admin sẽ đăng nhập sau khi tài khoản được tạo
+        res.status(201).json({
+            success: true,
+            message: `Admin user '${newAdmin.username}' registered successfully! Please login.`,
+            // data: { userId: newAdmin._id, email: newAdmin.email } // Có thể trả về một số thông tin nếu muốn
+        });
+
+    } catch (error) {
+        console.error('!!! CATCH BLOCK - Error during admin registration:', error);
+        if (error.name === 'ValidationError') {
+            const messages = Object.values(error.errors).map(val => val.message);
+            return res.status(400).json({ success: false, message: messages.join('. ') });
+        }
+        res.status(500).json({ success: false, message: 'Lỗi Server khi đăng ký admin' });
+    }
+};

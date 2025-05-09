@@ -12,14 +12,16 @@ import {
   InputAdornment,
   Divider,
   Link as MuiLink,
-  Grid
+  Grid,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import GoogleIcon from '@mui/icons-material/Google';
 import FacebookIcon from '@mui/icons-material/Facebook';
-import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 function LoginPage() {
   const [open, setOpen] = useState(true);
@@ -27,8 +29,8 @@ function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login, loading } = useAuth();
 
   const handleClose = () => {
     setOpen(false);
@@ -38,20 +40,13 @@ function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
-    try {
-      const response = await api.post('/auth/login', { email, password });
-      if (response.data && response.data.success) {
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
-        navigate('/');
-      } else {
-        setError(response.data.message || 'Đăng nhập thất bại.');
-      }
-    } catch (err) {
-      setError(err.response?.data?.message || 'Email hoặc mật khẩu không đúng hoặc lỗi server.');
-    } finally {
-      setLoading(false);
+
+    const result = await login(email, password);
+
+    if (result.success) {
+      navigate('/');
+    } else {
+      setError(result.message || 'Đăng nhập thất bại. Vui lòng thử lại.');
     }
   };
 
@@ -68,7 +63,9 @@ function LoginPage() {
           ĐĂNG NHẬP HOẶC TẠO TÀI KHOẢN
         </Typography>
         
-        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 4 }}>
+        {error && <Alert severity="error" sx={{ mt: 2, mb: 1 }}>{error}</Alert>}
+
+        <Box component="form" onSubmit={handleSubmit} sx={{ mt: error ? 1 : 4 }}>
           <TextField
             fullWidth
             margin="normal"
@@ -76,6 +73,7 @@ function LoginPage() {
             value={email}
             onChange={e => setEmail(e.target.value)}
             autoFocus
+            disabled={loading}
           />
           <TextField
             fullWidth
@@ -84,12 +82,14 @@ function LoginPage() {
             type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={e => setPassword(e.target.value)}
+            disabled={loading}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
                   <IconButton
                     onClick={() => setShowPassword((show) => !show)}
                     edge="end"
+                    disabled={loading}
                   >
                     {showPassword ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
@@ -120,7 +120,7 @@ function LoginPage() {
             }}
             disabled={loading}
           >
-            ĐĂNG NHẬP
+            {loading ? <CircularProgress size={24} color="inherit" /> : 'ĐĂNG NHẬP'}
           </Button>
           <Divider sx={{ my: 2 }}>hoặc đăng nhập bằng</Divider>
           <Grid container spacing={2}>
@@ -135,6 +135,7 @@ function LoginPage() {
                   fontWeight: 600,
                   textTransform: 'none'
                 }}
+                disabled={loading}
               >
                 Google
               </Button>
@@ -150,6 +151,7 @@ function LoginPage() {
                   fontWeight: 600,
                   textTransform: 'none'
                 }}
+                disabled={loading}
               >
                 Facebook
               </Button>

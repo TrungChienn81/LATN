@@ -22,11 +22,16 @@
     const shopRoutes = require('./routes/shop.routes'); 
     const cartRoutes = require('./routes/cart.routes');
     const orderRoutes = require('./routes/order.routes'); 
+    const userRoutes = require('./routes/user.routes'); // <<< Import user routes
+
+
     app.use('/api/auth', authRoutes); // Gắn auth routes vào đường dẫn /api/auth
     app.use('/api/products', productRoutes); // Gắn product routes vào /api/products
     app.use('/api/shops', shopRoutes);
     app.use('/api/cart', cartRoutes); 
     app.use('/api/orders', orderRoutes);
+    app.use('/api/users', userRoutes); // <<< Gắn user routes vào đường dẫn /api/users
+    
     // Khởi động server
     app.listen(PORT, () => {
         console.log(`Server is running on port ${PORT}`);

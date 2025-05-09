@@ -4,100 +4,110 @@ import api from '../services/api'; // Import axios instance
 import { useNavigate } from 'react-router-dom'; // Import useNavigate nếu muốn xử lý chuyển hướng trong context
 
 // 1. Tạo Context
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 // 2. Tạo Provider Component
 export const AuthProvider = ({ children }) => {
-  // State lưu trữ thông tin xác thực
-  const [authState, setAuthState] = useState({
-    token: localStorage.getItem('token') || null, // Lấy token từ localStorage nếu có
-    user: JSON.parse(localStorage.getItem('user')) || null, // Lấy user từ localStorage nếu có
-    isAuthenticated: !!localStorage.getItem('token'), // Xác định trạng thái đăng nhập ban đầu
-    isLoading: false, // Không cần isLoading nữa vì đã check ở trên
-    error: null,
-  });
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [loading, setLoading] = useState(true); // Ban đầu là true để check token
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
+
+    if (storedToken && storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setToken(storedToken);
+        api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error("Failed to parse user from localStorage", error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setIsAuthenticated(false);
+      }
+    }
+    setLoading(false); // Kết thúc kiểm tra token
+  }, []);
 
   // --- Các Hàm Hành Động ---
 
   // Hàm Đăng nhập
   const login = async (email, password) => {
-    setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
+    setLoading(true);
     try {
       const response = await api.post('/auth/login', { email, password });
       if (response.data && response.data.success) {
-        const { token, data: { user } } = response.data;
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(user));
-        setAuthState({
-          token: token,
-          user: user,
-          isAuthenticated: true,
-          isLoading: false,
-          error: null,
-        });
-        // Có thể return true để báo thành công cho component gọi nó
-        return true;
+        const { token: newToken, data } = response.data;
+        localStorage.setItem('token', newToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setUser(data.user);
+        setToken(newToken);
+        api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+        setIsAuthenticated(true);
+        setLoading(false);
+        // navigate('/'); // Điều hướng có thể xử lý ở component gọi login
+        return { success: true, user: data.user };
       } else {
-        // Xử lý trường hợp success: false từ backend
-        const errorMsg = response.data.message || 'Đăng nhập thất bại.';
-        setAuthState(prev => ({ ...prev, isLoading: false, error: errorMsg }));
-        return false;
+        setLoading(false);
+        return { success: false, message: response.data.message || 'Đăng nhập thất bại' };
       }
-    } catch (err) {
-      const errorMsg = err.response?.data?.message || 'Email hoặc mật khẩu không đúng hoặc lỗi server.';
-      console.error("AuthContext Login Error:", err);
-      setAuthState(prev => ({ ...prev, isLoading: false, error: errorMsg }));
-       return false; // Báo lỗi
+    } catch (error) {
+      setLoading(false);
+      console.error('Login error:', error.response?.data?.message || error.message);
+      return { success: false, message: error.response?.data?.message || 'Lỗi server khi đăng nhập' };
     }
   };
 
   // Hàm Đăng xuất
   const logout = () => {
-    console.log('Logging out...');
+    setUser(null);
+    setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setAuthState({
-      token: null,
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
-    });
-    // Không cần navigate ở đây, component gọi logout sẽ tự navigate nếu cần
-    // window.location.pathname = '/login'; // Hoặc dùng navigate nếu truyền vào
+    delete api.defaults.headers.common['Authorization'];
+    setIsAuthenticated(false);
+    navigate('/login'); // Điều hướng về trang login sau khi logout
   };
 
    // Hàm Đăng ký (không tự động đăng nhập sau khi đăng ký)
    const register = async (userData) => {
-     setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
+     setLoading(true);
      try {
-       const dataToSubmit = { ...userData };
-       delete dataToSubmit.confirmPassword; // Xóa confirmPassword trước khi gửi
-       const response = await api.post('/auth/register', dataToSubmit);
-       setAuthState(prev => ({ ...prev, isLoading: false })); // Đặt lại loading
-       return response.data; // Trả về response để component xử lý (vd: thông báo thành công)
-     } catch (err) {
-       const errorMsg = err.response?.data?.message || 'Lỗi đăng ký.';
-       console.error("AuthContext Register Error:", err);
-       setAuthState(prev => ({ ...prev, isLoading: false, error: errorMsg }));
-       throw err; // Ném lỗi ra để component bắt được nếu cần
+       const response = await api.post('/auth/register', userData);
+       setLoading(false);
+       return response.data; // { success: true/false, message: '...' }
+     } catch (error) {
+       setLoading(false);
+       console.error('Register error:', error.response?.data?.message || error.message);
+       return { success: false, message: error.response?.data?.message || 'Lỗi server khi đăng ký' };
      }
    };
 
 
   // Giá trị cung cấp bởi Context
   const value = {
-    authState,
+    user,
+    token,
+    isAuthenticated,
+    loading,
     login,
-    logout,
     register,
-    setAuthState // Có thể cần để cập nhật user info sau này mà không cần login lại
+    logout,
+    setUser, // Có thể cần để cập nhật user từ nơi khác (ví dụ: profile update)
+    setToken,
+    setIsAuthenticated
   };
 
   // Render Provider với giá trị context
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };
@@ -110,3 +120,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export default AuthContext;

@@ -10,12 +10,19 @@ import {
   InputBase, 
   alpha, 
   styled, 
-  Container 
+  Container,
+  Menu,
+  MenuItem
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import SearchIcon from '@mui/icons-material/Search';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+
+import { useAuth } from '../../contexts/AuthContext';
 
 // Search styling
 const Search = styled('div')(({ theme }) => ({
@@ -57,6 +64,22 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
 }));
 
 function Navbar() {
+  const { isAuthenticated, user, logout } = useAuth();
+  const [anchorEl, setAnchorEl] = React.useState(null);
+
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = () => {
+    logout();
+    handleMenuClose();
+  };
+
   return (
     <AppBar 
       position="static" 
@@ -79,7 +102,7 @@ function Navbar() {
               textDecoration: 'none' 
             }}
           >
-            TechHub AI
+            LATN
           </Typography>
 
           {/* Navigation Links */}
@@ -131,14 +154,61 @@ function Navbar() {
             >
               <ShoppingCartOutlinedIcon />
             </IconButton>
-            <IconButton 
-              sx={{ color: 'text.primary' }} 
-              aria-label="user account"
-              component={RouterLink}
-              to="/login"
-            >
-              <PersonOutlineIcon />
-            </IconButton>
+
+            {isAuthenticated && user ? (
+              <>
+                <IconButton
+                  edge="end"
+                  aria-label="account of current user"
+                  aria-controls="menu-appbar"
+                  aria-haspopup="true"
+                  onClick={handleMenuOpen}
+                  color="inherit"
+                  sx={{ color: 'text.primary', ml: 1 }}
+                >
+                  <AccountCircleIcon />
+                </IconButton>
+                <Menu
+                  id="menu-appbar"
+                  anchorEl={anchorEl}
+                  anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'right',
+                  }}
+                  keepMounted
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
+                  }}
+                  open={Boolean(anchorEl)}
+                  onClose={handleMenuClose}
+                >
+                  <MenuItem disabled sx={{ opacity: '1 !important' }}>
+                    <Typography variant="subtitle2">Chào, {user.firstName || user.username}!</Typography>
+                  </MenuItem>
+                  <MenuItem component={RouterLink} to="/profile" onClick={handleMenuClose}>Tài khoản của tôi</MenuItem>
+                  <MenuItem component={RouterLink} to="/orders" onClick={handleMenuClose}>Đơn hàng</MenuItem>
+                  {user.role === 'admin' && (
+                    <MenuItem component={RouterLink} to="/admin/dashboard" onClick={handleMenuClose}>
+                      <AdminPanelSettingsIcon sx={{ mr: 1 }} /> Admin Dashboard
+                    </MenuItem>
+                  )}
+                  <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
+                    <ExitToAppIcon sx={{ mr: 1 }} /> Đăng xuất
+                  </MenuItem>
+                </Menu>
+              </>
+            ) : (
+              <Button 
+                component={RouterLink} 
+                to="/login" 
+                color="inherit" 
+                sx={{ color: 'text.primary', fontWeight: 500, ml:1 }}
+                startIcon={<PersonOutlineIcon />} 
+              >
+                Đăng nhập
+              </Button>
+            )}
           </Box>
         </Toolbar>
       </Container>
