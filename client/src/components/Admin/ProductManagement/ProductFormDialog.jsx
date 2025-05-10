@@ -70,7 +70,7 @@ const ProductFormDialog = ({ open, onClose, onSubmit, initialData }) => {
         setFormData({
           name: initialData.name || '',
           description: initialData.description || '',
-          price: initialData.price || '',
+          price: (initialData.price < 1000000 ? initialData.price * 1000000 : initialData.price) || '',
           category: initialData.category?._id || initialData.category || '',
           brand: initialData.brand?._id || initialData.brand || '',
           stockQuantity: initialData.stockQuantity || 0,
@@ -218,7 +218,7 @@ const ProductFormDialog = ({ open, onClose, onSubmit, initialData }) => {
                 required
                 InputProps={{ inputProps: { min: 0 } }}
                 error={Boolean(errors.price)}
-                helperText={errors.price}
+                helperText={errors.price || 'Nhập giá sản phẩm (đơn vị: đồng, ví dụ: 23000000)'}
               />
               <TextField
                 name="stockQuantity"
@@ -232,39 +232,25 @@ const ProductFormDialog = ({ open, onClose, onSubmit, initialData }) => {
                 error={Boolean(errors.stockQuantity)}
                 helperText={errors.stockQuantity}
               />
-              <FormControl fullWidth margin="dense" required error={Boolean(errors.category)}>
-                <InputLabel>Danh mục</InputLabel>
-                {loadingCategories ? <CircularProgress size={20} /> : (
-                  <Select
-                    name="category"
-                    value={formData.category || ''}
-                    onChange={handleChange}
-                    label="Danh mục"
-                  >
-                    <MenuItem value=""><em>Chọn danh mục</em></MenuItem>
-                    {categories.map((cat) => (
-                      <MenuItem key={cat._id} value={cat._id}>{cat.name}</MenuItem>
-                    ))}
-                  </Select>
-                )}
-                {errors.category && <FormHelperText>{errors.category}</FormHelperText>}
-              </FormControl>
-              <FormControl fullWidth margin="dense">
-                <InputLabel>Thương hiệu (Tùy chọn)</InputLabel>
-                {loadingBrands ? <CircularProgress size={20} /> : (
-                  <Select
-                    name="brand"
-                    value={formData.brand || ''}
-                    onChange={handleChange}
-                    label="Thương hiệu (Tùy chọn)"
-                  >
-                    <MenuItem value=""><em>Chọn thương hiệu</em></MenuItem>
-                    {brands.map((brand) => (
-                      <MenuItem key={brand._id} value={brand._id}>{brand.name}</MenuItem>
-                    ))}
-                  </Select>
-                )}
-              </FormControl>
+              <TextField
+                name="category"
+                label="Danh mục"
+                value={formData.category || ''}
+                onChange={handleChange}
+                fullWidth
+                margin="dense"
+                required
+                error={Boolean(errors.category)}
+                helperText={errors.category}
+              />
+              <TextField
+                name="brand"
+                label="Thương hiệu (Tùy chọn)"
+                value={formData.brand || ''}
+                onChange={handleChange}
+                fullWidth
+                margin="dense"
+              />
             </Grid>
 
             {/* Image Upload Section */}

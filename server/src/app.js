@@ -23,6 +23,8 @@
     const cartRoutes = require('./routes/cart.routes');
     const orderRoutes = require('./routes/order.routes'); 
     const userRoutes = require('./routes/user.routes'); // <<< Import user routes
+    const categoryRoutes = require('./routes/category.routes');
+    const brandRoutes = require('./routes/brand.routes');
 
 
     app.use('/api/auth', authRoutes); // Gắn auth routes vào đường dẫn /api/auth
@@ -31,6 +33,8 @@
     app.use('/api/cart', cartRoutes); 
     app.use('/api/orders', orderRoutes);
     app.use('/api/users', userRoutes); // <<< Gắn user routes vào đường dẫn /api/users
+    app.use('/api/categories', categoryRoutes);
+    app.use('/api/brands', brandRoutes);
     
     // Khởi động server
     app.listen(PORT, () => {

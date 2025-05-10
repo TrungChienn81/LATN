@@ -20,6 +20,7 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminOverview from './components/Admin/AdminOverview';
 import AdminUserManagement from './components/Admin/UserManagement/AdminUserManagement';
 import AdminProductManagement from './components/Admin/ProductManagement/AdminProductManagement';
+import ProductDetailPage from './pages/ProductDetailPage';
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
         <Route element={<PublicLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/product/:id" element={<ProductDetailPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           {/* Các trang public khác */} 

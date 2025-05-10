@@ -27,7 +27,13 @@ const formatCurrency = (amount) => {
   if (typeof amount !== 'number') {
     return 'N/A';
   }
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+  // Nếu giá nhỏ hơn 1 triệu, coi như nhập triệu, tự động nhân 1,000,000 để hiển thị đúng đơn vị đồng
+  const realAmount = amount < 1000000 ? amount * 1000000 : amount;
+  return new Intl.NumberFormat('vi-VN', { 
+    style: 'currency', 
+    currency: 'VND',
+    maximumFractionDigits: 0  
+  }).format(realAmount);
 };
 
 const ProductList = ({ onEditProduct, refreshCounter }) => {
@@ -136,7 +142,9 @@ const ProductList = ({ onEditProduct, refreshCounter }) => {
               >
                 <TableCell align="center">
                   <Avatar 
-                    src={product.images && product.images.length > 0 ? product.images[0].url : ''} 
+                    src={product.images && product.images.length > 0 ? 
+                      (typeof product.images[0] === 'string' ? product.images[0] : 
+                       product.images[0]?.url || '') : ''}
                     alt={product.name}
                     variant="rounded"
                     sx={{ width: 56, height: 56, bgcolor: 'grey.200' }}

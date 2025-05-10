@@ -308,6 +308,10 @@ exports.importProducts = async (req, res, next) => {
     // Log thông tin user
     console.log('User performing import:', loggedInUser ? loggedInUser._id : 'No user data');
 
+    // Danh sách để theo dõi category và brand mới đã tạo để tránh tạo trùng lặp
+    const createdCategories = new Map();
+    const createdBrands = new Map();
+
     for (const productData of products) {
       // Khởi tạo object sản phẩm với các giá trị mặc định
       const processedProduct = {
@@ -316,8 +320,10 @@ exports.importProducts = async (req, res, next) => {
         price: parseFloat(productData.price || productData.Price || 0),
         stockQuantity: parseInt(productData.stockQuantity || productData.StockQuantity || 0, 10),
         category: productData.category || productData.Category || null,
+        categoryName: productData.categoryName || '',
         brand: productData.brand || productData.Brand || null,
-        images: []
+        brandName: productData.brandName || '',
+        images: productData.images || []
       };
       
       // --- VALIDATION ---
@@ -339,24 +345,89 @@ exports.importProducts = async (req, res, next) => {
         continue;
       }
 
-      // --- Xử lý Category và Brand (Nếu có CategoryID, BrandID trong productData) ---
+      // --- Xử lý Category ---
       let categoryId = null;
+      
+      // Nếu có sẵn id category hợp lệ, sử dụng nó
       if (processedProduct.category && mongoose.Types.ObjectId.isValid(processedProduct.category)) {
         const categoryExists = await Category.findById(processedProduct.category);
         if (categoryExists) {
           categoryId = categoryExists._id;
+        }
+      }
+      
+      // Nếu không có category ID nhưng có tên category, tìm hoặc tạo mới
+      if (!categoryId && processedProduct.categoryName) {
+        // Kiểm tra xem đã tạo category này trước đó chưa
+        if (createdCategories.has(processedProduct.categoryName.toLowerCase())) {
+          categoryId = createdCategories.get(processedProduct.categoryName.toLowerCase());
         } else {
-          console.warn(`CategoryID "${processedProduct.category}" không tìm thấy cho sản phẩm "${processedProduct.name}".`);
+          // Tìm category theo tên
+          let category = await Category.findOne({ 
+            name: { $regex: new RegExp('^' + processedProduct.categoryName + '$', 'i') } 
+          });
+          
+          if (!category) {
+            // Tạo category mới nếu không tìm thấy
+            try {
+              category = await Category.create({
+                name: processedProduct.categoryName,
+                description: `Category for imported product: ${processedProduct.name}`,
+                status: 'active'
+              });
+              console.log(`Created new category: ${category.name} with ID: ${category._id}`);
+              createdCategories.set(processedProduct.categoryName.toLowerCase(), category._id);
+            } catch (categoryError) {
+              console.error(`Error creating category "${processedProduct.categoryName}":`, categoryError);
+            }
+          }
+          
+          if (category) {
+            categoryId = category._id;
+          }
         }
       }
 
+      // --- Xử lý Brand ---
       let brandId = null;
+      
+      // Nếu có sẵn id brand hợp lệ, sử dụng nó
       if (processedProduct.brand && mongoose.Types.ObjectId.isValid(processedProduct.brand)) {
         const brandExists = await Brand.findById(processedProduct.brand);
         if (brandExists) {
           brandId = brandExists._id;
+        }
+      }
+      
+      // Nếu không có brand ID nhưng có tên brand, tìm hoặc tạo mới
+      if (!brandId && processedProduct.brandName) {
+        // Kiểm tra xem đã tạo brand này trước đó chưa
+        if (createdBrands.has(processedProduct.brandName.toLowerCase())) {
+          brandId = createdBrands.get(processedProduct.brandName.toLowerCase());
         } else {
-          console.warn(`BrandID "${processedProduct.brand}" không tìm thấy cho sản phẩm "${processedProduct.name}".`);
+          // Tìm brand theo tên
+          let brand = await Brand.findOne({ 
+            name: { $regex: new RegExp('^' + processedProduct.brandName + '$', 'i') } 
+          });
+          
+          if (!brand) {
+            // Tạo brand mới nếu không tìm thấy
+            try {
+              brand = await Brand.create({
+                name: processedProduct.brandName,
+                description: `Brand for imported product: ${processedProduct.name}`,
+                status: 'active'
+              });
+              console.log(`Created new brand: ${brand.name} with ID: ${brand._id}`);
+              createdBrands.set(processedProduct.brandName.toLowerCase(), brand._id);
+            } catch (brandError) {
+              console.error(`Error creating brand "${processedProduct.brandName}":`, brandError);
+            }
+          }
+          
+          if (brand) {
+            brandId = brand._id;
+          }
         }
       }
       
@@ -364,8 +435,8 @@ exports.importProducts = async (req, res, next) => {
       let processedImages = [];
       
       // Nếu có images là array
-      if (Array.isArray(productData.images)) {
-        productData.images.forEach(img => {
+      if (Array.isArray(processedProduct.images)) {
+        processedProduct.images.forEach(img => {
           if (typeof img === 'string') {
             processedImages.push(img);
           } else if (img && img.url) {
@@ -407,8 +478,8 @@ exports.importProducts = async (req, res, next) => {
           description: processedProduct.description,
           price: processedProduct.price,
           stockQuantity: processedProduct.stockQuantity || 0,
-          category: categoryId, // Có thể null
-          brand: brandId,       // Có thể null
+          category: categoryId, // Đã xử lý tìm hoặc tạo mới
+          brand: brandId,       // Đã xử lý tìm hoặc tạo mới
           images: processedImages,
           // Gán shopId - bắt buộc theo schema
           shopId: defaultShop._id
@@ -442,26 +513,21 @@ exports.importProducts = async (req, res, next) => {
          });
     }
     
-    if (failedCount > 0) {
-      return res.status(207).json({ // 207 Multi-Status
+    // Trả về kết quả import
+    return res.status(200).json({
         success: true,
-        message: `Import hoàn tất. Thành công: ${importedCount}. Thất bại: ${failedCount}.`,
-        importedCount: importedCount,
-        failedCount: failedCount,
-        // createdProducts: createdProducts, 
-        errors: errors
-      });
-    }
-
-    res.status(201).json({
-      success: true,
-      message: `Đã import thành công ${importedCount} sản phẩm!`,
-      importedCount: importedCount,
-      data: createdProducts
+        message: `Import thành công ${importedCount} sản phẩm. ${failedCount > 0 ? `Không thể import ${failedCount} sản phẩm.` : ''}`,
+        importedCount,
+        failedCount,
+        errors: errors.length > 0 ? errors : undefined,
+        newCategories: Array.from(createdCategories.entries()).map(([name, id]) => ({ name, id })),
+        newBrands: Array.from(createdBrands.entries()).map(([name, id]) => ({ name, id }))
     });
-
   } catch (error) {
-    console.error('Server error in importProducts controller:', error);
-    res.status(500).json({ success: false, message: 'Lỗi server khi import sản phẩm.' });
+    console.error('Error in product import process:', error);
+    return res.status(500).json({
+      success: false,
+      message: `Lỗi khi import sản phẩm: ${error.message}`,
+    });
   }
 };
