@@ -12,7 +12,7 @@ import {
   Select,
   MenuItem,
   FormHelperText,
-  CircularProgress, // For loading categories/brands
+  CircularProgress, 
   Box,
   Typography,
   Chip,
@@ -21,166 +21,183 @@ import {
 } from '@mui/material';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
 import CancelIcon from '@mui/icons-material/Cancel';
-import api from '../../../services/api'; // Assuming you have this for API calls
+import ImageWithFallback from '../../common/ImageWithFallback';
 
-const ProductFormDialog = ({ open, onClose, onSubmit, initialData }) => {
+const ProductFormDialog = ({ 
+  open, 
+  onClose, 
+  isEditMode, 
+  onSubmit, 
+  initialValues, 
+  isSubmitting, 
+  categories = [], 
+  brands = [] 
+}) => {
   const [formData, setFormData] = useState({});
-  const [errors, setErrors] = useState({});
-  const [categories, setCategories] = useState([]);
-  const [brands, setBrands] = useState([]); // Assuming you might have brands
-  const [loadingCategories, setLoadingCategories] = useState(false);
-  const [loadingBrands, setLoadingBrands] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
-
-  const isEditMode = Boolean(initialData && initialData._id);
-
-  // Fetch categories and brands
-  useEffect(() => {
-    const fetchDropdownData = async () => {
-      setLoadingCategories(true);
-      setLoadingBrands(true);
-      try {
-        const [catResponse, brandResponse] = await Promise.all([
-          api.get('/categories'), // Replace with your actual categories endpoint
-          api.get('/brands')      // Replace with your actual brands endpoint
-        ]);
-        if (catResponse.data && catResponse.data.success) {
-          setCategories(catResponse.data.data || []);
-        }
-        if (brandResponse.data && brandResponse.data.success) {
-          setBrands(brandResponse.data.data || []);
-        }
-      } catch (error) {
-        console.error("Error fetching categories/brands:", error);
-        // Handle error (e.g., show a snackbar message)
-      } finally {
-        setLoadingCategories(false);
-        setLoadingBrands(false);
-      }
-    };
-    if (open) {
-        fetchDropdownData();
-    }
-  }, [open]);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    if (open) {
-      if (isEditMode && initialData) {
-        setFormData({
-          name: initialData.name || '',
-          description: initialData.description || '',
-          price: (initialData.price < 1000000 ? initialData.price * 1000000 : initialData.price) || '',
-          category: initialData.category?._id || initialData.category || '',
-          brand: initialData.brand?._id || initialData.brand || '',
-          stockQuantity: initialData.stockQuantity || 0,
-          // existing images might be handled differently, not as new file uploads
-        });
-        // Populate image previews from existing images if any
-        if (initialData.images && initialData.images.length > 0) {
-          setImagePreviews(initialData.images.map(img => ({ ...img, isExisting: true })));
-        }
-        setSelectedFiles([]); // Clear any newly selected files if re-opening in edit mode
+    if (initialValues) {
+      console.log('Initial values:', initialValues);
+      const updatedInitialValues = {
+        ...initialValues,
+        price: typeof initialValues.price === 'number' ? initialValues.price * 1000000 : '',
+        // Xử lý danh mục
+        category: initialValues.category?.name || 
+                 (categories.find(c => c._id === initialValues.category)?.name) || 
+                 initialValues.category || '',
+        // Xử lý thương hiệu
+        brand: initialValues.brand?.name || 
+              (brands.find(b => b._id === initialValues.brand)?.name) || 
+              initialValues.brand || '',
+      };
+      console.log('Updated form data:', updatedInitialValues);
+      setFormData(updatedInitialValues);
+
+      // Xử lý ảnh sản phẩm
+      if (initialValues.images && Array.isArray(initialValues.images)) {
+        const previews = initialValues.images.map((img) => ({ 
+          url: typeof img === 'string' ? img : img.url || '', 
+          file: null 
+        }));
+        console.log('Image previews:', previews);
+        setImagePreviews(previews);
       } else {
-        setFormData({
-          name: '',
-          description: '',
-          price: '',
-          category: '',
-          brand: '',
-          stockQuantity: 0,
-        });
-        setSelectedFiles([]);
         setImagePreviews([]);
       }
-      setErrors({});
+    } else {
+      setFormData({
+        name: '',
+        description: '',
+        price: '',
+        stockQuantity: 0,
+        category: '',
+        brand: '',
+      });
+      setImagePreviews([]);
     }
-  }, [open, initialData, isEditMode]);
+    setErrors({}); 
+  }, [initialValues, open, categories, brands]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: null }));
-    }
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleFileChange = (event) => {
-    const files = Array.from(event.target.files);
-    // Basic validation (e.g., max number of files, file type, size)
-    if (selectedFiles.length + files.length > 5) { // Example: max 5 images
-        alert('Bạn chỉ có thể tải lên tối đa 5 ảnh.');
-        return;
-    }
+  const handleFileChange = (e) => {
+    const files = e.target.files;
+    if (!files || !files.length) return;
 
-    const newFiles = files.map(file => Object.assign(file, {
-        preview: URL.createObjectURL(file)
-    }));
+    // Tạo bản sao của mảng hiện tại
+    const newPreviews = [...imagePreviews];
     
-    setSelectedFiles(prev => [...prev, ...newFiles]);
-    setImagePreviews(prev => [...prev, ...newFiles.map(f => ({ url: f.preview, name: f.name, isNew: true }))]);
-  };
-
-  const handleRemoveImage = (imageToRemove, index) => {
-    if (imageToRemove.isNew) { // Removing a newly selected file
-        setSelectedFiles(prev => prev.filter((file, i) => file.preview !== imageToRemove.url));
-        setImagePreviews(prev => prev.filter((img, i) => img.url !== imageToRemove.url));
-        // Revoke object URL to free up memory
-        URL.revokeObjectURL(imageToRemove.url);
-    } else if (imageToRemove.isExisting) { // Marking an existing image for deletion
-        // This requires backend logic to handle deletion.
-        // For now, we'll just remove it from preview and add to a potential `deletedImages` list.
-        setImagePreviews(prev => prev.filter((img, i) => i !== index));
-        // You might want to add imageToRemove._id to a separate state array like `imagesToDelete`
-        // to send this info to the backend upon form submission.
-        setFormData(prev => ({
-            ...prev,
-            imagesToDelete: [...(prev.imagesToDelete || []), imageToRemove.public_id || imageToRemove._id]
+    // Thêm các file mới vào previews
+    Array.from(files).forEach((file) => {
+      // Kiểm tra kích thước file (tối đa 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setErrors(prev => ({ 
+          ...prev, 
+          images: `Ảnh ${file.name} vượt quá kích thước tối đa (5MB)` 
         }));
-    }
+        return;
+      }
+      
+      // Đọc file ảnh
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        newPreviews.push({ url: reader.result, file });
+        setImagePreviews([...newPreviews]);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
-
-  const validate = () => {
-    let tempErrors = {};
-    if (!formData.name) tempErrors.name = 'Tên sản phẩm là bắt buộc.';
-    if (!formData.price || formData.price <= 0) tempErrors.price = 'Giá sản phẩm phải lớn hơn 0.';
-    if (!formData.category) tempErrors.category = 'Danh mục là bắt buộc.';
-    if (formData.stockQuantity < 0) tempErrors.stockQuantity = 'Số lượng tồn kho không thể âm.';
-    // Add more validations as needed (e.g., description length)
-    setErrors(tempErrors);
-    return Object.keys(tempErrors).length === 0;
+  const handleRemoveImage = (image, index) => {
+    const updatedPreviews = [...imagePreviews];
+    updatedPreviews.splice(index, 1);
+    setImagePreviews(updatedPreviews);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (validate()) {
-      // For file uploads, you'll typically use FormData
-      const submissionData = new FormData();
-      Object.keys(formData).forEach(key => {
-        if (key === 'imagesToDelete') {
-            // Send array of image IDs/public_ids to delete
-            (formData.imagesToDelete || []).forEach(imgId => {
-                submissionData.append('imagesToDelete[]', imgId);
-            });
-        } else {
-            submissionData.append(key, formData[key]);
+    // Validate các trường bắt buộc
+    if (!formData.name || !formData.description || !formData.price || !formData.stockQuantity || !formData.category) {
+      setErrors({
+        name: !formData.name ? 'Tên Sản phẩm là bắt buộc' : '',
+        description: !formData.description ? 'Mô tả sản phẩm là bắt buộc' : '',
+        price: !formData.price ? 'Giá sản phẩm là bắt buộc' : '',
+        stockQuantity: !formData.stockQuantity ? 'Số lượng tồn kho là bắt buộc' : '',
+        category: !formData.category ? 'Danh mục là bắt buộc' : '',
+      });
+      return;
+    }
+    
+    try {
+      // Chuẩn bị dữ liệu để gửi
+      const clonedFormData = {...formData};
+      
+      // Chuyển đổi giá từ VND sang triệu VND nếu cần
+      if (clonedFormData.price && typeof clonedFormData.price !== 'undefined') {
+        const priceValue = typeof clonedFormData.price === 'string' 
+          ? parseFloat(clonedFormData.price.replace(/[^0-9.-]+/g, '')) 
+          : parseFloat(clonedFormData.price);
+          
+        if (!isNaN(priceValue)) {
+          // Nếu giá trị là hàng triệu VND (ví dụ: 21.950.000), chia cho 1.000.000
+          if (priceValue > 1000) {
+            clonedFormData.price = priceValue / 1000000;
+          } else {
+            // Nếu đã là triệu (ví dụ: 21.95) thì giữ nguyên
+            clonedFormData.price = priceValue;
+          }
+        }
+      }
+      
+      // Xử lý ảnh
+      const imageFiles = [];
+      
+      // Đảm bảo existingImages là một mảng
+      clonedFormData.existingImages = [];
+      
+      // Lọc các ảnh mới có file (chưa được tải lên trước đó)
+      imagePreviews.forEach(preview => {
+        // Kiểm tra đầy đủ điều kiện của preview
+        if (!preview || typeof preview !== 'object') return;
+        
+        // ƯU TIÊN: Nếu có preview.file, đó là file mới cần upload
+        if (preview.file) {
+          imageFiles.push(preview.file);
+        } else if (preview.url && (preview.url.startsWith('/uploads/') || preview.url.startsWith('http'))) {
+          // Chỉ khi không có preview.file, mới xét đến URL của ảnh đã tồn tại
+          clonedFormData.existingImages.push(preview.url);
         }
       });
-      selectedFiles.forEach(file => {
-        submissionData.append('images', file); // 'images' should match your backend field name
-      });
-      onSubmit(submissionData); 
+      
+      // Đảm bảo không có giá trị undefined hoặc null trong mảng
+      clonedFormData.existingImages = clonedFormData.existingImages.filter(url => url && typeof url === 'string');
+      
+      console.log('Submitting with data:', clonedFormData);
+      console.log('New image files:', imageFiles);
+      console.log('Existing images:', clonedFormData.existingImages || []);
+      
+      // Gọi hàm onSubmit (handleFormSubmit từ AdminProductManagement)
+      onSubmit(clonedFormData, imageFiles);
+    } catch (error) {
+      console.error('Error in form submission:', error);
+      // Hiển thị lỗi nếu có
+      setErrors(prevErrors => ({
+        ...prevErrors,
+        form: 'Có lỗi xảy ra khi gửi form: ' + error.message
+      }));
     }
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth scroll="paper">
-      <DialogTitle>{isEditMode ? 'Chỉnh sửa Sản phẩm' : 'Thêm Sản phẩm mới'}</DialogTitle>
+      <DialogTitle>{isEditMode ? 'Chỉnh sửa Sản phẩm' : 'Chỉnh sửa Sản phẩm'}</DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent dividers>
           <Grid container spacing={3}>
-            {/* Left Column: Basic Info */}
             <Grid item xs={12} md={7}>
               <TextField
                 name="name"
@@ -205,7 +222,6 @@ const ProductFormDialog = ({ open, onClose, onSubmit, initialData }) => {
               />
             </Grid>
 
-            {/* Right Column: Pricing, Stock, Categories */}
             <Grid item xs={12} md={5}>
               <TextField
                 name="price"
@@ -241,64 +257,94 @@ const ProductFormDialog = ({ open, onClose, onSubmit, initialData }) => {
                 margin="dense"
                 required
                 error={Boolean(errors.category)}
-                helperText={errors.category}
+                helperText={errors.category || 'Nhập tên danh mục sản phẩm'}
+                InputProps={{
+                  endAdornment: categories.length > 0 && (
+                    <Button 
+                      size="small" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        // Hiển thị danh sách gợi ý nếu cần
+                      }}
+                    >
+                      Gợi ý
+                    </Button>
+                  ),
+                }}
               />
+
               <TextField
                 name="brand"
-                label="Thương hiệu (Tùy chọn)"
+                label="Thương hiệu"
                 value={formData.brand || ''}
                 onChange={handleChange}
                 fullWidth
                 margin="dense"
+                error={Boolean(errors.brand)}
+                helperText={errors.brand || 'Nhập tên thương hiệu sản phẩm (không bắt buộc)'}
+                InputProps={{
+                  endAdornment: brands.length > 0 && (
+                    <Button 
+                      size="small" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        // Hiển thị danh sách gợi ý nếu cần
+                      }}
+                    >
+                      Gợi ý
+                    </Button>
+                  ),
+                }}
               />
             </Grid>
 
-            {/* Image Upload Section */}
             <Grid item xs={12}>
-              <Typography variant="subtitle1" gutterBottom sx={{mt: 1}}>Hình ảnh sản phẩm</Typography>
+              <Typography variant="subtitle1" gutterBottom sx={{ mt: 1 }}>Hình ảnh sản phẩm</Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '10px', mb: 2 }}>
                 {imagePreviews.map((image, index) => (
                   <Box key={index} sx={{ position: 'relative', border: '1px dashed grey', padding: '5px', borderRadius: '4px' }}>
-                    <Avatar 
-                        src={image.url} 
-                        alt={`preview ${index}`} 
-                        variant="rounded" 
-                        sx={{ width: 100, height: 100 }}
+                    <ImageWithFallback
+                      src={image.url}
+                      alt={`preview ${index}`}
+                      sx={{ 
+                        width: 100, 
+                        height: 100, 
+                        borderRadius: 1
+                      }}
                     />
                     <IconButton 
-                        size="small"
-                        onClick={() => handleRemoveImage(image, index)}
-                        sx={{
-                            position: 'absolute',
-                            top: -10,
-                            right: -10,
-                            backgroundColor: 'rgba(255,255,255,0.7)',
-                            '&:hover': { backgroundColor: 'white' }
-                        }}
+                      size="small"
+                      onClick={() => handleRemoveImage(image, index)}
+                      sx={{
+                        position: 'absolute',
+                        top: -10,
+                        right: -10,
+                        backgroundColor: 'rgba(255,255,255,0.7)',
+                        '&:hover': { backgroundColor: 'white' }
+                      }}
                     >
-                        <CancelIcon fontSize="small" color="error"/>
+                      <CancelIcon fontSize="small" color="error"/>
                     </IconButton>
                   </Box>
                 ))}
                 {imagePreviews.length < 5 && (
-                    <Button 
-                        variant="outlined" 
-                        component="label" 
-                        startIcon={<AddPhotoAlternateIcon />} 
-                        sx={{height: 112, width: 112, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column'}}
-                    >
-                        Thêm ảnh
-                        <input type="file" hidden multiple accept="image/*" onChange={handleFileChange} />
-                    </Button>
+                  <Button 
+                    variant="outlined" 
+                    component="label" 
+                    startIcon={<AddPhotoAlternateIcon />} 
+                    sx={{ height: 112, width: 112, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}
+                  >
+                    Thêm ảnh
+                    <input type="file" hidden multiple accept="image/*" onChange={handleFileChange} />
+                  </Button>
                 )}
               </Box>
             </Grid>
-
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ px:3, pb: 2}}>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={onClose}>Hủy bỏ</Button>
-          <Button type="submit" variant="contained" > {/* Add disabled={loadingSubmission} if you have such state */}
+          <Button type="submit" variant="contained" > 
             {isEditMode ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
           </Button>
         </DialogActions>

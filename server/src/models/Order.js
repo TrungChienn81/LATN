@@ -99,7 +99,7 @@ const orderSchema = new Schema({
     collection: 'Orders'
 });
 
-orderSchema.index({ orderCode: 1 });
+// Không cần index orderCode vì đã được đánh index tự động qua unique: true
 orderSchema.index({ userId: 1 });
 orderSchema.index({ 'items.shopId': 1 }); // Index shopId trong items nếu cần query theo shop
 

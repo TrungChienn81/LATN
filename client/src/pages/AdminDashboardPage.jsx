@@ -28,8 +28,10 @@ const AdminDashboardPage = () => {
   const menuItems = [
     // Sửa path cho "Tổng quan" để nó là một sub-route cụ thể
     { text: 'Tổng quan', icon: <DashboardIcon />, path: '/admin/dashboard/overview' }, 
-    { text: 'Quản lý Người dùng', icon: <PeopleIcon />, path: '/admin/dashboard/users' }, // <<< Sửa path
-    { text: 'Quản lý Sản phẩm', icon: <CategoryIcon />, path: '/admin/dashboard/products' }, // <<< Sửa path
+    { text: 'Quản lý Người dùng', icon: <PeopleIcon />, path: '/admin/dashboard/users' }, 
+    { text: 'Quản lý Sản phẩm', icon: <CategoryIcon />, path: '/admin/dashboard/products' }, 
+    { text: 'Quản lý Danh mục', icon: <CategoryIcon />, path: '/admin/dashboard/categories' },
+    { text: 'Quản lý Thương hiệu', icon: <StorefrontIcon />, path: '/admin/dashboard/brands' },
     { text: 'Quản lý Gian hàng', icon: <StorefrontIcon />, path: '/admin/dashboard/shops' },    // <<< Sửa path
     { text: 'Quản lý Đơn hàng', icon: <BarChartIcon />, path: '/admin/dashboard/orders' },   // <<< Sửa path
     { text: 'Cài đặt Hệ thống', icon: <SettingsIcon />, path: '/admin/dashboard/settings' }, // <<< Sửa path

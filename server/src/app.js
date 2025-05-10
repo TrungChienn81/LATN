@@ -1,21 +1,24 @@
-    require('dotenv').config(); // Nạp biến môi trường từ .env
-    const express = require('express');
-    console.log('--- CONNECTION STRING FROM ENV:', process.env.MONGODB_URI); // <-- Thêm dòng này
-    const mongoose = require('mongoose');
-    const cors = require('cors');
+require('dotenv').config(); // Nạp biến môi trường từ .env
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const path = require('path');
 
-    const app = express();
-    const PORT = process.env.PORT || 5000;
+const app = express();
+const PORT = process.env.PORT || 5000;
 
-    // Middleware cơ bản
-    app.use(cors()); // Cho phép truy cập từ tên miền khác (frontend)
-    app.use(express.json()); // Parse JSON request body
+// Middleware cơ bản
+app.use(cors()); // Cho phép truy cập từ tên miền khác (frontend)
+app.use(express.json()); // Parse JSON request body
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request body
 
-    // Kết nối MongoDB
-    mongoose.connect(process.env.MONGODB_URI)
-        .then(() => console.log('MongoDB connected successfully!'))
-        .catch(err => console.error('MongoDB connection error:', err));
+// Phục vụ tệp tĩnh từ thư mục uploads
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+// Kết nối MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('MongoDB connected successfully!'))
+    .catch(err => console.error('MongoDB connection error:', err));
     // ---- Các Routes API sẽ được thêm vào đây ----
     const authRoutes = require('./routes/auth.routes'); // Import auth routes
     const productRoutes = require('./routes/product.routes'); // Import product routes

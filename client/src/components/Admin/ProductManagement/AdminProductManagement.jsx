@@ -9,6 +9,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   FormControl,
   InputLabel,
@@ -21,15 +22,29 @@ import {
   ListItem,
   ListItemText,
   Divider,
-  Chip
+  Chip,
+  Paper,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableContainer,
+  IconButton,
+  Pagination,
+  Avatar
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import ProductList from './ProductList';
 import ProductFormDialog from './ProductFormDialog';
 import api from '../../../services/api';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import ImageWithFallback from '../../common/ImageWithFallback';
 
 const AdminProductManagement = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -40,19 +55,37 @@ const AdminProductManagement = () => {
   const fileInputRef = useRef(null);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [products, setProducts] = useState([]);
+  
+  // State cho phân trang
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  });
   
   // State for import mapping dialog
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [fileData, setFileData] = useState(null);
   const [fileHeaders, setFileHeaders] = useState([]);
   const [columnMapping, setColumnMapping] = useState({
-    name: '',
-    description: '',
-    price: '',
-    stockQuantity: '',
-    category: '',
-    brand: '',
-    image: ''
+    name: '', // Tên sản phẩm
+    description: '', // Mô tả
+    price: '', // Giá
+    stockQuantity: '', // Số lượng tồn kho (không bắt buộc)
+    category: '', // Danh mục (không bắt buộc)
+    brand: '', // Thương hiệu (không bắt buộc)
+    image: '', // URL ảnh
+    // Các trường proloop
+    'proloop-technical--line': '',
+    'proloop-technical--line 2': '',
+    'proloop-technical--line 3': '',
+    'proloop-technical--line 4': '',
+    'proloop-technical--line 5': '',
+    'proloop-technical--line 6': '',
+    'proloop-price--compare': '',
+    'img_default_src': '',
   });
   const [sampleData, setSampleData] = useState([]);
 
@@ -60,7 +93,64 @@ const AdminProductManagement = () => {
   const [importResults, setImportResults] = useState(null);
   const [isResultsDialogOpen, setIsResultsDialogOpen] = useState(false);
 
-  // Fetch categories and brands on component mount
+  // State cho dialog xác nhận xóa
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingProductId, setDeletingProductId] = useState(null);
+  
+  // State cho dialog xác nhận xóa tất cả sản phẩm
+  const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
+
+  // Hàm fetch sản phẩm với phân trang
+  const fetchProducts = async () => {
+    try {
+      const { page, limit } = pagination;
+      const response = await api.get(`/products?page=${page}&limit=${limit}`);
+      if (response.data && response.data.success) {
+        // Cập nhật thông tin phân trang
+        setPagination({
+          ...pagination,
+          total: response.data.total,
+          totalPages: response.data.totalPages,
+          page: response.data.currentPage
+        });
+        
+        // Map các danh mục và thương hiệu từ ID sang tên để hiển thị
+        const productsWithNames = response.data.data.map(product => {
+          try {
+            // Tìm danh mục dựa trên ID
+            const category = categories.find(cat => cat._id === product.category);
+            // Tìm thương hiệu dựa trên ID
+            const brand = brands.find(b => b._id === product.brand);
+            
+            return {
+              ...product,
+              categoryName: category ? category.name : 'Không xác định',
+              brandName: brand ? brand.name : 'Không xác định'
+            };
+          } catch (mappingError) {
+            console.warn('Lỗi khi xử lý sản phẩm:', mappingError, 'Product:', product);
+            return {
+              ...product,
+              categoryName: 'Không xác định',
+              brandName: 'Không xác định'
+            };
+          }
+        });
+        
+        setProducts(productsWithNames);
+        console.log('Fetched products with category/brand names:', productsWithNames);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setSnackbar({
+        open: true,
+        message: 'Không thể tải danh sách sản phẩm.',
+        severity: 'error'
+      });
+    }
+  };
+
+  // Fetch categories, brands và products khi component mount hoặc refreshKey thay đổi
   useEffect(() => {
     const fetchCategoriesAndBrands = async () => {
       try {
@@ -75,6 +165,9 @@ const AdminProductManagement = () => {
         if (brandsResponse.data && brandsResponse.data.success) {
           setBrands(brandsResponse.data.data || []);
         }
+        
+        // Sau khi có categories và brands thì fetch products
+        // Để có thể map tên danh mục và thương hiệu cho chính xác
       } catch (error) {
         console.error('Error fetching categories and brands:', error);
         setSnackbar({
@@ -85,8 +178,10 @@ const AdminProductManagement = () => {
       }
     };
     
-    fetchCategoriesAndBrands();
-  }, []);
+    fetchCategoriesAndBrands().then(() => {
+      fetchProducts(); // Fetch products sau khi có categories và brands
+    });
+  }, [refreshKey]); // refreshKey thay đổi sẽ gọi lại useEffect này
 
   // Utility function to find category by name
   const findCategoryByName = (categoryName) => {
@@ -125,6 +220,77 @@ const AdminProductManagement = () => {
     
     return null;
   };
+  
+  // Xử lý khi nhấn nút chỉnh sửa sản phẩm
+  const handleEdit = (product) => {
+    // Chuyển đổi các trường dữ liệu nếu cần
+    const editableProduct = {
+      ...product,
+      // Chuyển đổi giá từ triệu sang VND để hiển thị trong form
+      price: product.price ? product.price * 1000000 : 0,
+      // Đảm bảo category hiển thị đúng
+      category: product.categoryName || '',
+      // Đảm bảo brand hiển thị đúng
+      brand: product.brandName || ''
+    };
+    console.log('Editing product:', editableProduct);
+    setEditingProduct(editableProduct);
+    setIsFormOpen(true);
+  };
+  
+  // Xử lý khi nhấn nút xóa sản phẩm
+  const handleDelete = async (productId) => {
+    try {
+      const response = await api.delete(`/products/${productId}`);
+      if (response.data && response.data.success) {
+        setSnackbar({
+          open: true,
+          message: 'Xóa sản phẩm thành công!',
+          severity: 'success'
+        });
+        // Cập nhật lại danh sách sản phẩm
+        setRefreshKey(prev => prev + 1);
+      } else {
+        throw new Error(response.data?.message || 'Lỗi khi xóa sản phẩm');
+      }
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || error.message || 'Lỗi khi xóa sản phẩm',
+        severity: 'error'
+      });
+    }
+  };
+
+  // Xử lý xóa tất cả sản phẩm
+  const handleDeleteAllProducts = async () => {
+    try {
+      const response = await api.delete('/products/delete-all');
+      if (response.data && response.data.success) {
+        setSnackbar({
+          open: true,
+          message: response.data.message || `Đã xóa tất cả sản phẩm thành công!`,
+          severity: 'success'
+        });
+        // Đóng dialog xác nhận
+        setDeleteAllConfirmOpen(false);
+        // Refresh product list
+        setRefreshKey(prev => prev + 1);
+      } else {
+        throw new Error(response.data?.message || 'Có lỗi xảy ra');
+      }
+    } catch (error) {
+      console.error('Error deleting all products:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || error.message || 'Lỗi khi xóa tất cả sản phẩm',
+        severity: 'error'
+      });
+      // Đóng dialog xác nhận
+      setDeleteAllConfirmOpen(false);
+    }
+  };
 
   const handleOpenFormDialog = (product = null) => {
     setEditingProduct(product);
@@ -137,304 +303,510 @@ const AdminProductManagement = () => {
     setEditingProduct(null);
   };
 
-  const handleFormSubmit = async (formData) => {
+  const handleFormSubmit = async (formData, images) => {
     setIsSubmitting(true);
     try {
+      // Kiểm tra xem có file ảnh mới không
+      const hasImageFiles = images && images.length > 0;
+      // Extract other form data
+      const { existingImages, ...otherFormData } = formData;
+      
       let response;
-      if (editingProduct && editingProduct._id) {
-        response = await api.put(`/products/${editingProduct._id}`, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
+      
+      if (hasImageFiles) {
+        // Sử dụng FormData nếu có file ảnh mới
+        const formDataObj = new FormData();
+        
+        // Thêm các trường dữ liệu từ formData (otherFormData) vào FormData
+        // TRỪ TRƯỜNG 'images' vì chúng ta sẽ xử lý file riêng
+        Object.keys(otherFormData).forEach(key => {
+          if (key !== 'images' && otherFormData[key] !== undefined && otherFormData[key] !== null) {
+            if (key === 'shopId' && typeof otherFormData[key] === 'object' && otherFormData[key]._id) {
+              formDataObj.append(key, otherFormData[key]._id); // Gửi ID của shop
+            } else {
+              formDataObj.append(key, otherFormData[key]);
+            }
+          }
         });
+        
+        // Thêm ảnh đã tồn tại (nếu có và không phải là file mới)
+        if (existingImages && existingImages.length > 0) {
+          existingImages.forEach((url) => {
+            // Chỉ thêm nếu nó là một URL, không phải là đối tượng File còn sót lại từ logic cũ
+            if (typeof url === 'string') {
+              formDataObj.append('existingImages', url); // Sử dụng key khác cho ảnh cũ nếu cần phân biệt rõ ràng hơn ở backend
+            }
+          });
+        }
+        
+        // Thêm các file ảnh mới vào FormData với key 'images'
+        images.forEach(file => {
+          if (file instanceof File) { // Đảm bảo đó thực sự là một File object
+            formDataObj.append('images', file);
+          }
+        });
+        
+        console.log('Sending product data with images');
+        for (let [key, value] of formDataObj.entries()) {
+          console.log(`${key}: ${value instanceof File ? value.name : value}`);
+        }
+        
+        // QUAN TRỌNG: KHÔNG đặt header 'Content-Type' khi gửi FormData
+        // Axios sẽ tự động đặt đúng header với boundary
+        
+        if (editingProduct && editingProduct._id) {
+          response = await api.put(`/products/${editingProduct._id}`, formDataObj);
+        } else {
+          response = await api.post('/products', formDataObj);
+        }
       } else {
-        response = await api.post('/products', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-      }
+        // Sử dụng JSON nếu không có file ảnh mới
+        const finalData = { ...otherFormData };
 
-      if (response.data && response.data.success) {
-        setSnackbar({ 
-          open: true, 
-          message: editingProduct ? 'Cập nhật sản phẩm thành công!' : 'Thêm sản phẩm mới thành công!', 
-          severity: 'success' 
+        // Đảm bảo shopId là ID nếu nó là object
+        if (finalData.shopId && typeof finalData.shopId === 'object' && finalData.shopId._id) {
+          finalData.shopId = finalData.shopId._id;
+        }
+
+        // Bao gồm ảnh đã tồn tại (nếu có) - lọc các đối tượng không hợp lệ
+        if (existingImages && existingImages.length > 0) {
+          finalData.images = existingImages.filter(img => typeof img === 'string' && img.trim() !== '');
+        } else {
+          // Nếu không có existingImages và cũng không có file mới, đảm bảo images là mảng rỗng
+          finalData.images = []; 
+        }
+        
+        console.log('Sending product data as JSON:', finalData);
+        
+        if (editingProduct && editingProduct._id) {
+          response = await api.put(
+            `/products/${editingProduct._id}`, 
+            finalData
+          );
+        } else {
+          response = await api.post('/products', finalData);
+        }
+      }
+      
+      // Xử lý response dựa trên cấu trúc { status: 'success', data: { product: ... } }
+      // hoặc cấu trúc cũ { success: true, ... }
+      if ((response.data && response.data.success) || 
+          (response.data && response.data.status === 'success')) {
+        setSnackbar({
+          open: true,
+          message: editingProduct 
+            ? 'Cập nhật sản phẩm thành công!' 
+            : 'Thêm sản phẩm mới thành công!',
+          severity: 'success'
         });
-        setRefreshKey(k => k + 1);
         handleCloseFormDialog();
+        // Refresh product list
+        setRefreshKey(prev => prev + 1);
       } else {
-        throw new Error(response.data.message || 'Thao tác thất bại. Vui lòng thử lại.');
+        throw new Error(response.data?.message || response.data?.data?.message || 'Có lỗi xảy ra');
       }
-    } catch (err) {
-      console.error("Error submitting product form:", err);
-      let errorMessage = 'Đã có lỗi xảy ra trong quá trình xử lý.';
-      if (err.response && err.response.data && err.response.data.message) {
-        errorMessage = err.response.data.message;
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      setSnackbar({ 
-        open: true, 
-        message: errorMessage, 
-        severity: 'error' 
+    } catch (error) {
+      console.error('Error submitting product:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || error.message || 'Có lỗi xảy ra khi lưu sản phẩm',
+        severity: 'error'
       });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleSnackbarClose = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
+  // Xử lý khi người dùng chọn file để import
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    
+    try {
+      // Xử lý file CSV
+      if (fileExtension === 'csv') {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            if (results.data && results.data.length > 0) {
+              setFileData(results.data);
+              setFileHeaders(results.meta.fields || []);
+              setSampleData(results.data.slice(0, 5));
+              setIsImportDialogOpen(true);
+            } else {
+              setSnackbar({
+                open: true,
+                message: 'File CSV không có dữ liệu',
+                severity: 'error'
+              });
+            }
+          },
+          error: function(error) {
+            console.error('Error parsing CSV:', error);
+            setSnackbar({
+              open: true,
+              message: 'Lỗi khi đọc file CSV',
+              severity: 'error'
+            });
+          }
+        });
+      }
+      // Xử lý file Excel
+      else if (['xlsx', 'xls'].includes(fileExtension)) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            const data = e.target.result;
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            
+            if (jsonData && jsonData.length > 1) { // Kể cả tiêu đề
+              const headers = jsonData[0];
+              const rows = jsonData.slice(1);
+              
+              const formattedData = rows.map(row => {
+                const obj = {};
+                headers.forEach((header, index) => {
+                  obj[header] = row[index];
+                });
+                return obj;
+              });
+              
+              setFileData(formattedData);
+              setFileHeaders(headers);
+              setSampleData(formattedData.slice(0, 5));
+              setIsImportDialogOpen(true);
+            } else {
+              setSnackbar({
+                open: true,
+                message: 'File Excel không có dữ liệu',
+                severity: 'error'
+              });
+            }
+          } catch (error) {
+            console.error('Error processing Excel file:', error);
+            setSnackbar({
+              open: true,
+              message: 'Lỗi khi xử lý file Excel',
+              severity: 'error'
+            });
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        setSnackbar({
+          open: true,
+          message: 'Chỉ hỗ trợ file CSV, XLSX hoặc XLS',
+          severity: 'warning'
+        });
+      }
+    } catch (error) {
+      console.error('Error handling file:', error);
+      setSnackbar({
+        open: true,
+        message: 'Lỗi khi xử lý file',
+        severity: 'error'
+      });
     }
-    setSnackbar(prev => ({ ...prev, open: false }));
-  };
-
-  const handleImportButtonClick = () => {
-    fileInputRef.current.click();
-  };
-
-  // New functions for import mapping
-  const handleShowImportDialog = (parsedData, headers) => {
-    setFileData(parsedData);
-    setFileHeaders(headers);
     
-    // Set sample data for preview
-    setSampleData(parsedData.slice(0, 3));
-    
-    // Try to auto-map common column names
-    const newMapping = { ...columnMapping };
-    
-    headers.forEach(header => {
-      const headerLower = header.toLowerCase();
-      
-      if (headerLower.includes('name') || headerLower.includes('product') || headerLower === 'proloop-name') {
-        newMapping.name = header;
-      }
-      else if (headerLower.includes('desc') || headerLower.includes('mô tả')) {
-        newMapping.description = header;
-      }
-      else if (headerLower.includes('price') || headerLower.includes('giá') || headerLower === 'proloop-price--highlight') {
-        newMapping.price = header;
-      }
-      else if (headerLower.includes('stock') || headerLower.includes('quantity') || headerLower.includes('số lượng') || headerLower === 'count') {
-        newMapping.stockQuantity = header;
-      }
-      else if (headerLower.includes('categ') || headerLower.includes('danh mục')) {
-        newMapping.category = header;
-      }
-      else if (headerLower.includes('brand') || headerLower.includes('thương hiệu')) {
-        newMapping.brand = header;
-      }
-      else if (headerLower.includes('image') || headerLower.includes('img') || headerLower.includes('ảnh') || headerLower === 'img-default src') {
-        newMapping.image = header;
-      }
-    });
-    
-    setColumnMapping(newMapping);
-    setIsImportDialogOpen(true);
+    // Reset giá trị input file để có thể chọn lại cùng file nếu cần
+    event.target.value = '';
   };
   
+  // Khi đóng dialog import sản phẩm
   const handleImportDialogClose = () => {
     setIsImportDialogOpen(false);
     setFileData(null);
     setFileHeaders([]);
+    setColumnMapping({
+      name: '',
+      description: '',
+      price: '',
+      stockQuantity: '',
+      category: '',
+      brand: '',
+      image: '',
+      // Các trường proloop
+      'proloop-technical--line': '',
+      'proloop-technical--line 2': '',
+      'proloop-technical--line 3': '',
+      'proloop-technical--line 4': '',
+      'proloop-technical--line 5': '',
+      'proloop-technical--line 6': '',
+      'proloop-price--compare': '',
+      'img_default_src': '',
+    });
     setSampleData([]);
   };
-  
-  const handleMappingChange = (field, value) => {
-    setColumnMapping(prev => ({ ...prev, [field]: value }));
+
+  // Xử lý khi đóng dialog kết quả import
+  const handleResultsDialogClose = () => {
+    setIsResultsDialogOpen(false);
+    // Refresh danh sách sản phẩm sau khi import
+    if (importResults && importResults.success > 0) {
+      setRefreshKey(prev => prev + 1);
+    }
   };
   
-  const handleProcessMappedData = () => {
-    if (!fileData) return;
-    
-    const mappedProducts = fileData.map(item => {
-      let descriptionLines = [];
-      if (columnMapping.description && item[columnMapping.description]) {
-        descriptionLines.push(item[columnMapping.description]);
-      }
-      
-      const stockQuantityString = columnMapping.stockQuantity ? 
-        (item[columnMapping.stockQuantity] || '0').toString().replace(/[^\d]/g, '') : '0';
-      const stockQuantity = parseInt(stockQuantityString, 10);
-
-      let imageUrls = [];
-      if (columnMapping.image && item[columnMapping.image]) {
-        let imageUrl = item[columnMapping.image];
-        if (imageUrl.startsWith('@')) {
-          imageUrl = imageUrl.substring(1);
-        }
-        imageUrls.push(imageUrl);
-      }
-
-      const processPrice = (priceString) => {
-        if (!priceString) return 0;
-        const clearedPrice = priceString.toString().replace(/[^\d.]/g, '');
-        if (parseFloat(clearedPrice) < 1000) {
-          return parseFloat(clearedPrice);
-        }
-        return parseFloat(clearedPrice) / 1000000;
-      };
-
-      const price = columnMapping.price ? processPrice(item[columnMapping.price]) : 0;
-
-      // Get category and brand names from the mapped columns
-      const categoryName = columnMapping.category ? item[columnMapping.category] : null;
-      const categoryId = categoryName ? findCategoryByName(categoryName) : null;
-      
-      const brandName = columnMapping.brand ? item[columnMapping.brand] : null;
-      const brandId = brandName ? findBrandByName(brandName) : null;
-
-      return {
-        name: columnMapping.name ? item[columnMapping.name] : `Sản phẩm không tên ${Date.now()}`,
-        description: descriptionLines.join('\n'),
-        price: isNaN(price) ? 0 : price,
-        stockQuantity: isNaN(stockQuantity) ? 0 : stockQuantity,
-        images: imageUrls,
-        category: categoryId,
-        categoryName: categoryName,
-        brand: brandId,
-        brandName: brandName
-      };
-    }).filter(p => p.name && typeof p.price === 'number' && p.price >= 0);
-
-    console.log("Mapped products:", mappedProducts);
-
-    if (mappedProducts.length === 0) {
-      setSnackbar({ 
-        open: true, 
-        message: 'Không tìm thấy dữ liệu sản phẩm hợp lệ từ file sau khi mapping. Vui lòng kiểm tra mapping.', 
-        severity: 'warning' 
+  // Hàm xử lý import với mapping đã chọn
+  const handleImportWithMapping = async () => {
+    // Kiểm tra xem ít nhất có trường tên sản phẩm được mapping chưa
+    if (!columnMapping.name) {
+      setSnackbar({
+        open: true,
+        message: 'Bạn cần chọn cột nào chứa tên sản phẩm',
+        severity: 'error'
       });
       return;
     }
     
-    // Close the mapping dialog
-    handleImportDialogClose();
-    
-    // Call the import API
-    handleBulkImportApiCall(mappedProducts);
-  };
-
-  const handleFileSelected = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      console.log("Selected file:", file.name, file.type);
-      setSnackbar({ open: true, message: `Đang xử lý file: ${file.name}...`, severity: 'info' });
-
-      if (file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')) {
-        Papa.parse(file, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            if (results.data && results.data.length > 0) {
-              // Instead of direct processing, show the mapping dialog
-              handleShowImportDialog(results.data, Object.keys(results.data[0]));
-            } else {
-              setSnackbar({ open: true, message: 'File CSV rỗng hoặc không có dữ liệu.', severity: 'warning' });
-            }
-          },
-          error: (error) => {
-            console.error("Error parsing CSV:", error);
-            setSnackbar({ open: true, message: `Lỗi khi đọc file CSV: ${error.message}`, severity: 'error' });
-          }
-        });
-      } else if (file.type.includes('spreadsheetml.sheet') || file.type.includes('ms-excel') || file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const data = e.target.result;
-            const workbook = XLSX.read(data, { type: 'binary' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-            
-            if (jsonData.length > 1) {
-              const headers = jsonData[0].map(h => String(h).trim());
-              const rows = jsonData.slice(1).map(rowArray => {
-                let rowObject = {};
-                headers.forEach((header, index) => {
-                  rowObject[header] = rowArray[index];
-                });
-                return rowObject;
-              });
-              
-              // Instead of direct processing, show the mapping dialog
-              handleShowImportDialog(rows, headers);
-            } else {
-               setSnackbar({ open: true, message: 'File Excel rỗng hoặc chỉ có dòng tiêu đề.', severity: 'warning' });
-            }
-          } catch (error) {
-            console.error("Error parsing XLSX:", error);
-            setSnackbar({ open: true, message: `Lỗi khi đọc file Excel: ${error.message}`, severity: 'error' });
-          }
-        };
-        reader.onerror = (error) => {
-            console.error("FileReader error:", error);
-            setSnackbar({ open: true, message: 'Không thể đọc file.', severity: 'error' });
-        };
-        reader.readAsBinaryString(file);
-      } else {
-        setSnackbar({ open: true, message: 'Định dạng file không được hỗ trợ. Vui lòng chọn file CSV hoặc Excel.', severity: 'error' });
-      }
-      event.target.value = null; 
-    }
-  };
-
-  // Updated handleBulkImportApiCall to show results
-  const handleBulkImportApiCall = async (productsToImport) => {
-    setSnackbar({ open: true, message: `Đang chuẩn bị import ${productsToImport.length} sản phẩm...`, severity: 'info' });
-    setIsSubmitting(true);
     try {
-      const response = await api.post('/products/import', { products: productsToImport });
-      if (response.data && response.data.success) {
-        // Store the results for display
-        setImportResults({
-          message: response.data.message,
-          importedCount: response.data.importedCount,
-          failedCount: response.data.failedCount,
-          newCategories: response.data.newCategories || [],
-          newBrands: response.data.newBrands || [],
-          errors: response.data.errors || []
-        });
+      // Chuyển đổi dữ liệu thô sang dữ liệu đã mapping
+      const mappedData = fileData.map(row => {
+        const mappedRow = {};
+        // Tạo mô tả từ các trường proloop-technical-line
+        let description = '';
         
-        // Show results dialog if there are new categories or brands
-        if ((response.data.newCategories && response.data.newCategories.length > 0) || 
-            (response.data.newBrands && response.data.newBrands.length > 0)) {
-          setIsResultsDialogOpen(true);
-        } else {
-          // Otherwise just show a snackbar
-          setSnackbar({ 
-            open: true, 
-            message: response.data.message || `Đã import thành công ${response.data.importedCount || productsToImport.length} sản phẩm!`, 
-            severity: 'success' 
-          });
+        // Lặp qua từng trường mapping và gán giá trị tương ứng
+        Object.keys(columnMapping).forEach(field => {
+          const column = columnMapping[field];
+          if (column && row[column] !== undefined) {
+            // Nếu là trường proloop-technical, thêm vào mô tả
+            if (field.startsWith('proloop-technical--line')) {
+              const value = row[column];
+              if (value) {
+                if (description) description += '\n';
+                description += value;
+              }
+            } 
+            // Nếu là trường giá
+            else if (field === 'proloop-price--compare') {
+              mappedRow.price = row[column];
+              // Chuyển đổi giá từ định dạng "25.990.000đ" sang số
+              if (typeof mappedRow.price === 'string') {
+                mappedRow.price = mappedRow.price.replace(/[^\d]/g, ''); // Loại bỏ tất cả ký tự không phải số
+                mappedRow.price = parseFloat(mappedRow.price) / 1000000; // Chuyển sang đơn vị triệu
+              }
+            } 
+            // Nếu là trường ảnh
+            else if (field === 'image' || field === 'img_default_src') {
+              mappedRow.image = row[column];
+            }
+            // Các trường khác
+            else {
+              mappedRow[field] = row[column];
+            }
+          }
+        });
+
+        // Gán mô tả từ các trường proloop-technical
+        if (description) {
+          mappedRow.description = description;
+        }
+
+        // Xác định stockQuantity mặc định
+        if (!mappedRow.stockQuantity) {
+          mappedRow.stockQuantity = 10; // Số lượng mặc định
         }
         
-        setRefreshKey(k => k + 1); // Refresh lại danh sách sản phẩm
-      } else {
-        throw new Error(response.data.message || 'Import thất bại.');
+        // Nếu không có category, đặt mặc định là "Gaming"
+        if (!mappedRow.category) {
+          mappedRow.category = 'Gaming';
+        }
+
+        // Xử lý trường brand từ tên sản phẩm nếu chưa được set
+        if (!mappedRow.brand && mappedRow.name) {
+          const nameParts = mappedRow.name.split(' ');
+          if (nameParts.length > 1) {
+            // Thường tên sản phẩm có format: "Laptop gaming Acer..."
+            // Lấy phần tử thứ 3 (index 2) là thương hiệu
+            if (nameParts.length >= 3) {
+              mappedRow.brand = nameParts[2]; // Acer, Dell, HP, etc.
+            }
+          }
+        }
+        
+        // Đảm bảo ít nhất có tên sản phẩm
+        if (!mappedRow.name) return null;
+        
+        return mappedRow;
+      }).filter(Boolean); // Loại bỏ các dòng không có tên sản phẩm
+      
+      if (mappedData.length === 0) {
+        setSnackbar({
+          open: true,
+          message: 'Không có dữ liệu hợp lệ sau khi mapping',
+          severity: 'error'
+        });
+        return;
       }
-    } catch (err) {
-      console.error("Error importing products:", err);
-      setSnackbar({ 
-        open: true, 
-        message: err.response?.data?.message || err.message || 'Lỗi khi import sản phẩm.', 
-        severity: 'error' 
+      
+      // Log dữ liệu đã mapping để kiểm tra
+      console.log('Mapped data:', mappedData);
+      
+      // Hiển thị thông báo đang import
+      setSnackbar({
+        open: true,
+        message: 'Đang import sản phẩm...',
+        severity: 'info'
       });
-    } finally {
-      setIsSubmitting(false);
+      setIsImportDialogOpen(false);
+      
+      // Gửi dữ liệu tới server để import
+      const response = await api.post('/products/import', { 
+        products: mappedData,
+        useProloopFields: true // Bật flag để server biết xử lý các trường proloop
+      });
+      
+      console.log('Import response:', response.data);
+      
+      if (response.data && response.data.success) {
+        // Hiển thị kết quả import
+        setImportResults({
+          success: response.data.success || 0,
+          failed: response.data.failed || 0,
+          failures: response.data.failures || []
+        });
+        setIsResultsDialogOpen(true);
+        
+        // Hiển thị thông báo thành công
+        setSnackbar({
+          open: true,
+          message: `Đã import thành công ${response.data.success} sản phẩm`,
+          severity: 'success'
+        });
+        
+        // Refresh danh sách sản phẩm
+        setRefreshKey(prev => prev + 1);
+      } else {
+        throw new Error(response.data.message || 'Import thất bại');
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      setSnackbar({
+        open: true,
+        message: `Lỗi khi import: ${error.message || 'Unknown error'}`,
+        severity: 'error'
+      });
     }
   };
-  
-  const handleCloseResultsDialog = () => {
-    setIsResultsDialogOpen(false);
-  };
-
   return (
     <Box sx={{ width: '100%' }}>
+      {/* Bảng hiển thị sản phẩm */}
+      <Paper sx={{ width: '100%', mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2 }}>
+          <Typography variant="h6" component="div">
+            Quản lý Sản phẩm
+          </Typography>
+          <Box>
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={() => {
+                setEditingProduct(null);
+                setIsFormOpen(true);
+              }}
+              startIcon={<AddIcon />}
+              sx={{ mr: 1 }}
+            >
+              Thêm Sản phẩm mới
+            </Button>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => fileInputRef.current.click()}
+              startIcon={<FileUploadIcon />}
+              sx={{ mr: 1 }}
+            >
+              Import từ File
+              <input
+                type="file"
+                hidden
+                accept=".csv,.xlsx,.xls"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+              />
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={() => setDeleteAllConfirmOpen(true)}
+              startIcon={<DeleteSweepIcon />}
+            >
+              Xóa tất cả sản phẩm
+            </Button>
+          </Box>
+        </Box>
+        
+        <TableContainer>
+          <Table sx={{ minWidth: 650 }} aria-label="Products table">
+            <TableHead>
+              <TableRow>
+                <TableCell>Ảnh</TableCell>
+                <TableCell>Tên Sản phẩm</TableCell>
+                <TableCell>Danh mục</TableCell>
+                <TableCell>Giá</TableCell>
+                <TableCell>Tồn kho</TableCell>
+                <TableCell>Hành động</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {products.map((product) => (
+                <TableRow key={product._id}>
+                  <TableCell>
+                    <ImageWithFallback
+                      src={product.images && product.images.length > 0 ? product.images[0] : ''}
+                      alt={product.name}
+                      sx={{
+                        height: 50,
+                        width: 50,
+                        border: '1px solid #eee',
+                        bgcolor: '#f5f5f5',
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>{product.name}</TableCell>
+                  <TableCell>{product.categoryName || 'Không xác định'}</TableCell>
+                  <TableCell>{product.price ? `${(product.price * 1000000).toLocaleString()} ₫` : 'N/A'}</TableCell>
+                  <TableCell>{product.stockQuantity}</TableCell>
+                  <TableCell>
+                    <IconButton onClick={() => handleEdit(product)} size="small">
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton onClick={() => handleDelete(product._id)} size="small" color="error">
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        
+        {/* Phân trang */}
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', p: 2 }}>
+          <Pagination 
+            count={pagination.totalPages} 
+            page={pagination.page} 
+            onChange={(event, newPage) => {
+              setPagination({ ...pagination, page: newPage });
+            }}
+            color="primary"
+            showFirstButton 
+            showLastButton
+          />
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Hiển thị {products.length} / {pagination.total} sản phẩm
+          </Typography>
+        </Box>
+      </Paper>
+
       {/* Import Mapping Dialog */}
       <Dialog 
         open={isImportDialogOpen} 
@@ -442,337 +814,421 @@ const AdminProductManagement = () => {
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>
-          Thiết lập import sản phẩm
-        </DialogTitle>
+        <DialogTitle>Nhập sản phẩm từ file</DialogTitle>
         <DialogContent>
-          <Typography variant="subtitle1" sx={{ mb: 2 }}>
-            Vui lòng chọn cột dữ liệu tương ứng với từng trường thông tin sản phẩm:
-          </Typography>
-          
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="name-column-label">Tên sản phẩm *</InputLabel>
-                <Select
-                  labelId="name-column-label"
-                  value={columnMapping.name}
-                  label="Tên sản phẩm *"
-                  onChange={(e) => handleMappingChange('name', e.target.value)}
-                  required
-                >
-                  <MenuItem value=""><em>Không chọn</em></MenuItem>
-                  {fileHeaders.map(header => (
-                    <MenuItem key={header} value={header}>{header}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle1" gutterBottom>
+              Cấu hình ánh xạ cột
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph>
+              Chọn cột nào từ file tương ứng với từng trường dữ liệu trong hệ thống
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              {/* Field mapping */}
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="name-column-label">Tên sản phẩm</InputLabel>
+                  <Select
+                    labelId="name-column-label"
+                    value={columnMapping.name}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, name: e.target.value })}
+                    label="Tên sản phẩm"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="proloop-name-column-label">proloop-name</InputLabel>
+                  <Select
+                    labelId="proloop-name-column-label"
+                    value={columnMapping.proloopName}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, proloopName: e.target.value })}
+                    label="proloop-name"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="description-column-label">Mô tả</InputLabel>
+                  <Select
+                    labelId="description-column-label"
+                    value={columnMapping.description}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, description: e.target.value })}
+                    label="Mô tả"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="price-column-label">Giá</InputLabel>
+                  <Select
+                    labelId="price-column-label"
+                    value={columnMapping.price}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, price: e.target.value })}
+                    label="Giá"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="proloop-price-compare-column-label">proloop-price--compare</InputLabel>
+                  <Select
+                    labelId="proloop-price-compare-column-label"
+                    value={columnMapping.proloopPriceCompare}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, proloopPriceCompare: e.target.value })}
+                    label="proloop-price--compare"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="proloop-price-highlight-column-label">proloop-price--highlight</InputLabel>
+                  <Select
+                    labelId="proloop-price-highlight-column-label"
+                    value={columnMapping.proloopPriceHighlight}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, proloopPriceHighlight: e.target.value })}
+                    label="proloop-price--highlight"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="stockQuantity-column-label">Số lượng</InputLabel>
+                  <Select
+                    labelId="stockQuantity-column-label"
+                    value={columnMapping.stockQuantity}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, stockQuantity: e.target.value })}
+                    label="Số lượng"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="category-column-label">Danh mục</InputLabel>
+                  <Select
+                    labelId="category-column-label"
+                    value={columnMapping.category}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, category: e.target.value })}
+                    label="Danh mục"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="brand-column-label">Thương hiệu</InputLabel>
+                  <Select
+                    labelId="brand-column-label"
+                    value={columnMapping.brand}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, brand: e.target.value })}
+                    label="Thương hiệu"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="image-column-label">URL Ảnh</InputLabel>
+                  <Select
+                    labelId="image-column-label"
+                    value={columnMapping.image}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, image: e.target.value })}
+                    label="URL Ảnh"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="img-default-src-column-label">img-default src</InputLabel>
+                  <Select
+                    labelId="img-default-src-column-label"
+                    value={columnMapping.imgDefaultSrc}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, imgDefaultSrc: e.target.value })}
+                    label="img-default src"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="href-column-label">href</InputLabel>
+                  <Select
+                    labelId="href-column-label"
+                    value={columnMapping.href}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, href: e.target.value })}
+                    label="href"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="aspect-ratio-column-label">aspect-ratio</InputLabel>
+                  <Select
+                    labelId="aspect-ratio-column-label"
+                    value={columnMapping.aspectRatio}
+                    onChange={(e) => setColumnMapping({ ...columnMapping, aspectRatio: e.target.value })}
+                    label="aspect-ratio"
+                  >
+                    <MenuItem value=""><em>Không chọn</em></MenuItem>
+                    {fileHeaders.map((header) => (
+                      <MenuItem key={header} value={header}>{header}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
             </Grid>
             
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="price-column-label">Giá *</InputLabel>
-                <Select
-                  labelId="price-column-label"
-                  value={columnMapping.price}
-                  label="Giá *"
-                  onChange={(e) => handleMappingChange('price', e.target.value)}
-                  required
-                >
-                  <MenuItem value=""><em>Không chọn</em></MenuItem>
-                  {fileHeaders.map(header => (
-                    <MenuItem key={header} value={header}>{header}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="stock-column-label">Số lượng tồn kho</InputLabel>
-                <Select
-                  labelId="stock-column-label"
-                  value={columnMapping.stockQuantity}
-                  label="Số lượng tồn kho"
-                  onChange={(e) => handleMappingChange('stockQuantity', e.target.value)}
-                >
-                  <MenuItem value=""><em>Không chọn</em></MenuItem>
-                  {fileHeaders.map(header => (
-                    <MenuItem key={header} value={header}>{header}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="image-column-label">Ảnh sản phẩm</InputLabel>
-                <Select
-                  labelId="image-column-label"
-                  value={columnMapping.image}
-                  label="Ảnh sản phẩm"
-                  onChange={(e) => handleMappingChange('image', e.target.value)}
-                >
-                  <MenuItem value=""><em>Không chọn</em></MenuItem>
-                  {fileHeaders.map(header => (
-                    <MenuItem key={header} value={header}>{header}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="desc-column-label">Mô tả</InputLabel>
-                <Select
-                  labelId="desc-column-label"
-                  value={columnMapping.description}
-                  label="Mô tả"
-                  onChange={(e) => handleMappingChange('description', e.target.value)}
-                >
-                  <MenuItem value=""><em>Không chọn</em></MenuItem>
-                  {fileHeaders.map(header => (
-                    <MenuItem key={header} value={header}>{header}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="category-column-label">Danh mục</InputLabel>
-                <Select
-                  labelId="category-column-label"
-                  value={columnMapping.category}
-                  label="Danh mục"
-                  onChange={(e) => handleMappingChange('category', e.target.value)}
-                >
-                  <MenuItem value=""><em>Không chọn</em></MenuItem>
-                  {fileHeaders.map(header => (
-                    <MenuItem key={header} value={header}>{header}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel id="brand-column-label">Thương hiệu</InputLabel>
-                <Select
-                  labelId="brand-column-label"
-                  value={columnMapping.brand}
-                  label="Thương hiệu"
-                  onChange={(e) => handleMappingChange('brand', e.target.value)}
-                >
-                  <MenuItem value=""><em>Không chọn</em></MenuItem>
-                  {fileHeaders.map(header => (
-                    <MenuItem key={header} value={header}>{header}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-          
-          {sampleData.length > 0 && (
-            <Box sx={{ mt: 4 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Xem trước dữ liệu (3 dòng đầu tiên):
-              </Typography>
-              <Box sx={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #ddd', p: 1 }}>
-                {sampleData.map((row, index) => (
-                  <Box key={index} sx={{ mb: 1, p: 1, borderBottom: '1px solid #eee' }}>
-                    <Typography variant="body2">
-                      <strong>Tên:</strong> {columnMapping.name ? row[columnMapping.name] : 'N/A'}<br />
-                      <strong>Giá:</strong> {columnMapping.price ? row[columnMapping.price] : 'N/A'}<br />
-                      <strong>Danh mục:</strong> {columnMapping.category ? row[columnMapping.category] : 'N/A'}<br />
-                      <strong>Thương hiệu:</strong> {columnMapping.brand ? row[columnMapping.brand] : 'N/A'}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          )}
+            <Typography variant="subtitle1" gutterBottom>
+              Xem trước dữ liệu
+            </Typography>
+            {sampleData.length > 0 && (
+              <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      {fileHeaders.map((header) => (
+                        <TableCell key={header}>{header}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sampleData.map((row, index) => (
+                      <TableRow key={index}>
+                        {fileHeaders.map((header) => (
+                          <TableCell key={`${index}-${header}`}>
+                            {row[header] || ''}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleImportDialogClose}>Hủy</Button>
+          <Button onClick={handleImportDialogClose} color="inherit">
+            Hủy bỏ
+          </Button>
           <Button
-            onClick={handleProcessMappedData}
             variant="contained"
-            disabled={!columnMapping.name || !columnMapping.price}
+            color="primary"
+            onClick={handleImportWithMapping}
+            disabled={!columnMapping.name} // Yêu cầu ít nhất phải có tên sản phẩm
           >
-            {isSubmitting ? <CircularProgress size={24} /> : 'Import'}
+            Tiếp tục Import
           </Button>
         </DialogActions>
       </Dialog>
-
+      
       {/* Import Results Dialog */}
-      <Dialog
-        open={isResultsDialogOpen}
-        onClose={handleCloseResultsDialog}
+      <Dialog 
+        open={isResultsDialogOpen} 
+        onClose={handleResultsDialogClose}
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>Kết quả Import Sản phẩm</DialogTitle>
+        <DialogTitle>Kết quả nhập sản phẩm</DialogTitle>
         <DialogContent>
           {importResults && (
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                {importResults.message}
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Tổng kết
               </Typography>
+              <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+                <Paper sx={{ p: 2, flex: 1, bgcolor: 'success.light', color: 'success.contrastText' }}>
+                  <Typography variant="h6">{importResults.success || 0}</Typography>
+                  <Typography variant="body2">Sản phẩm thành công</Typography>
+                </Paper>
+                <Paper sx={{ p: 2, flex: 1, bgcolor: 'error.light', color: 'error.contrastText' }}>
+                  <Typography variant="h6">{importResults.failed || 0}</Typography>
+                  <Typography variant="body2">Sản phẩm thất bại</Typography>
+                </Paper>
+              </Stack>
               
-              <Box sx={{ my: 2, display: 'flex', gap: 2 }}>
-                <Chip 
-                  label={`Đã import: ${importResults.importedCount} sản phẩm`} 
-                  color="success" 
-                  variant="outlined"
-                />
-                {importResults.failedCount > 0 && (
-                  <Chip 
-                    label={`Lỗi: ${importResults.failedCount} sản phẩm`} 
-                    color="error" 
-                    variant="outlined"
-                  />
-                )}
-              </Box>
-              
-              {importResults.newCategories && importResults.newCategories.length > 0 && (
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-                    Danh mục mới được tạo:
+              {importResults.failures && importResults.failures.length > 0 && (
+                <>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Chi tiết lỗi
                   </Typography>
-                  <List dense sx={{ bgcolor: 'background.paper', border: '1px solid #e0e0e0', borderRadius: 1 }}>
-                    {importResults.newCategories.map((category, index) => (
-                      <React.Fragment key={category.id || index}>
-                        <ListItem>
-                          <ListItemText 
-                            primary={category.name} 
-                            secondary={`ID: ${category.id}`}
-                          />
-                        </ListItem>
-                        {index < importResults.newCategories.length - 1 && <Divider />}
-                      </React.Fragment>
-                    ))}
-                  </List>
-                </Box>
-              )}
-              
-              {importResults.newBrands && importResults.newBrands.length > 0 && (
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold' }}>
-                    Thương hiệu mới được tạo:
-                  </Typography>
-                  <List dense sx={{ bgcolor: 'background.paper', border: '1px solid #e0e0e0', borderRadius: 1 }}>
-                    {importResults.newBrands.map((brand, index) => (
-                      <React.Fragment key={brand.id || index}>
-                        <ListItem>
-                          <ListItemText 
-                            primary={brand.name} 
-                            secondary={`ID: ${brand.id}`}
-                          />
-                        </ListItem>
-                        {index < importResults.newBrands.length - 1 && <Divider />}
-                      </React.Fragment>
-                    ))}
-                  </List>
-                </Box>
-              )}
-              
-              {importResults.errors && importResults.errors.length > 0 && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 'bold', color: 'error.main' }}>
-                    Lỗi khi import:
-                  </Typography>
-                  <List dense sx={{ bgcolor: 'error.lightest', border: '1px solid #ffcccc', borderRadius: 1 }}>
-                    {importResults.errors.slice(0, 5).map((error, index) => (
+                  <List>
+                    {importResults.failures.map((failure, index) => (
                       <React.Fragment key={index}>
-                        <ListItem>
-                          <ListItemText 
-                            primary={error.error} 
-                            secondary={error.item?.name || 'Sản phẩm không tên'}
+                        <ListItem alignItems="flex-start">
+                          <ListItemText
+                            primary={`Dòng ${failure.row}: ${failure.productName || 'Không có tên'}`}
+                            secondary={failure.error || 'Lỗi không xác định'}
                           />
                         </ListItem>
-                        {index < Math.min(importResults.errors.length, 5) - 1 && <Divider />}
+                        {index < importResults.failures.length - 1 && <Divider />}
                       </React.Fragment>
                     ))}
-                    {importResults.errors.length > 5 && (
-                      <ListItem>
-                        <ListItemText 
-                          primary={`...và ${importResults.errors.length - 5} lỗi khác`}
-                        />
-                      </ListItem>
-                    )}
                   </List>
-                </Box>
+                </>
               )}
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseResultsDialog} variant="contained">
+          <Button onClick={handleResultsDialogClose} color="primary">
             Đóng
           </Button>
         </DialogActions>
       </Dialog>
-
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h5" gutterBottom component="div" sx={{ mb: 0 }}>
-          Quản lý Sản phẩm
-        </Typography>
-        <Stack direction="row" spacing={1.5}>
-          <Button
-            variant="outlined"
-            startIcon={<FileUploadIcon />}
-            onClick={handleImportButtonClick}
-            disabled={isSubmitting}
-          >
-            Import từ File
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenFormDialog()} 
-            disabled={isSubmitting}
-          >
-            Thêm Sản phẩm mới
-          </Button>
-        </Stack>
-      </Box>
       
-      <input 
-        type="file"
-        hidden
-        ref={fileInputRef}
-        onChange={handleFileSelected}
-        accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+      {/* Product Form Dialog */}
+      <ProductFormDialog
+        open={isFormOpen}
+        onClose={handleCloseFormDialog}
+        onSubmit={handleFormSubmit}
+        initialValues={editingProduct}
+        isSubmitting={isSubmitting}
+        categories={categories}
+        brands={brands}
       />
-
-      <ProductList
-        onEditProduct={handleOpenFormDialog} 
-        refreshCounter={refreshKey} 
-      />
-
-      {isFormOpen && (
-        <ProductFormDialog
-          open={isFormOpen}
-          onClose={handleCloseFormDialog}
-          onSubmit={handleFormSubmit}
-          initialData={editingProduct}
-          isSubmitting={isSubmitting}
-        />
-      )}
       
-      <Snackbar
+      {/* Snackbar thông báo */}
+      <Snackbar 
         open={snackbar.open} 
         autoHideDuration={6000} 
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       >
-        <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>
+        <Alert 
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Dialog xác nhận xóa sản phẩm */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+      >
+        <DialogTitle>Xác nhận xóa</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Bạn có chắc chắn muốn xóa sản phẩm này không? Hành động này không thể hoàn tác.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Hủy</Button>
+          <Button 
+            onClick={() => {
+              setDeleteConfirmOpen(false);
+              handleDelete(deletingProductId);
+            }} 
+            color="error" 
+            autoFocus
+          >
+            Xóa
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Dialog xác nhận xóa tất cả sản phẩm */}
+      <Dialog
+        open={deleteAllConfirmOpen}
+        onClose={() => setDeleteAllConfirmOpen(false)}
+      >
+        <DialogTitle>Xóa tất cả sản phẩm</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            <strong>Cảnh báo:</strong> Bạn sắp xóa tất cả sản phẩm trong hệ thống!
+          </DialogContentText>
+          <DialogContentText sx={{ mt: 2, color: 'error.main' }}>
+            Hành động này không thể hoàn tác và sẽ xóa vĩnh viễn tất cả sản phẩm. 
+            Bạn có chắc chắn muốn tiếp tục không?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteAllConfirmOpen(false)} autoFocus>
+            Hủy
+          </Button>
+          <Button 
+            onClick={handleDeleteAllProducts} 
+            color="error" 
+            variant="contained"
+          >
+            Xóa tất cả sản phẩm
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
 
-export default AdminProductManagement; 
+export default AdminProductManagement;

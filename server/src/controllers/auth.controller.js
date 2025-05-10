@@ -3,6 +3,7 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { promisify } = require('util'); //Để dùng async/await với jwt.verify
 
 // Hàm xử lý đăng ký
 exports.register = async (req, res) => {
@@ -189,4 +190,73 @@ exports.registerAdmin = async (req, res) => {
         }
         res.status(500).json({ success: false, message: 'Lỗi Server khi đăng ký admin' });
     }
+};
+
+// Middleware để bảo vệ routes
+exports.protect = async (req, res, next) => {
+  try {
+    // 1) Lấy token và kiểm tra xem nó có tồn tại không
+    let token;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+    // Hoặc nếu token được gửi qua cookie (tùy theo cách bạn thiết kế API)
+    // else if (req.cookies.jwt) {
+    //   token = req.cookies.jwt;
+    // }
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Bạn chưa đăng nhập. Vui lòng đăng nhập để có quyền truy cập.',
+      });
+    }
+
+    // 2) Xác thực token
+    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+
+    // 3) Kiểm tra xem người dùng có còn tồn tại không
+    const currentUser = await User.findById(decoded.id);
+    if (!currentUser) {
+      return res.status(401).json({
+        success: false,
+        message: 'Người dùng sở hữu token này không còn tồn tại.',
+      });
+    }
+
+    // 4) Kiểm tra xem người dùng có đổi mật khẩu sau khi token được cấp không
+    // (Cần thêm trường passwordChangedAt vào User model nếu muốn dùng tính năng này)
+    // if (currentUser.changedPasswordAfter(decoded.iat)) {
+    //   return res.status(401).json({
+    //     success: false,
+    //     message: 'Người dùng gần đây đã thay đổi mật khẩu. Vui lòng đăng nhập lại.',
+    //   });
+    // }
+
+    // CẤP QUYỀN TRUY CẬP VÀO ROUTE ĐƯỢC BẢO VỆ
+    req.user = currentUser; // Gắn user vào request để các middleware sau có thể sử dụng
+    next();
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ success: false, message: 'Token không hợp lệ. Vui lòng đăng nhập lại.' });
+    } else if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Token đã hết hạn. Vui lòng đăng nhập lại.' });
+    } 
+    console.error('Protect middleware error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi xác thực người dùng.' });
+  }
+};
+
+// Middleware để giới hạn quyền truy cập dựa trên vai trò (role)
+exports.restrictTo = (...roles) => {
+  return (req, res, next) => {
+    // roles là một mảng, ví dụ: ['admin', 'lead-guide']. req.user đã được gán từ middleware 'protect'
+    if (!req.user || !req.user.role || !roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền thực hiện hành động này.',
+      });
+    }
+    next();
+  };
 };

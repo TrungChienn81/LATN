@@ -14,7 +14,6 @@ import {
   IconButton,
   Tooltip,
   Snackbar,
-  Avatar // For product image
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -23,17 +22,16 @@ import api from '../../../services/api';
 import ConfirmationDialog from '../UserManagement/ConfirmationDialog'; // Reusing ConfirmationDialog
 
 // Helper function to format currency (you might want to move this to a utils file)
-const formatCurrency = (amount) => {
-  if (typeof amount !== 'number') {
+const formatCurrency = (amountMillions) => {
+  if (typeof amountMillions !== 'number') {
     return 'N/A';
   }
-  // Nếu giá nhỏ hơn 1 triệu, coi như nhập triệu, tự động nhân 1,000,000 để hiển thị đúng đơn vị đồng
-  const realAmount = amount < 1000000 ? amount * 1000000 : amount;
+  const fullAmount = amountMillions * 1000000; // Chuyển từ triệu đồng sang đồng
   return new Intl.NumberFormat('vi-VN', { 
     style: 'currency', 
     currency: 'VND',
-    maximumFractionDigits: 0  
-  }).format(realAmount);
+    maximumFractionDigits: 0 // Giữ nguyên để không hiển thị số thập phân sau khi đã là đơn vị đồng
+  }).format(fullAmount);
 };
 
 const ProductList = ({ onEditProduct, refreshCounter }) => {
@@ -141,24 +139,37 @@ const ProductList = ({ onEditProduct, refreshCounter }) => {
                 sx={{ '&:last-child td, &:last-child th': { border: 0 }, '&:hover': { backgroundColor: 'action.hover'} }}
               >
                 <TableCell align="center">
-                  <Avatar 
+                  <Box
+                    component="img"
                     src={product.images && product.images.length > 0 ? 
-                      (typeof product.images[0] === 'string' ? product.images[0] : 
-                       product.images[0]?.url || '') : ''}
+                      (typeof product.images[0] === 'string' ? 
+                        (product.images[0].startsWith('http') ? 
+                          product.images[0] : 
+                          `${window.location.origin}${product.images[0]}`) : 
+                        product.images[0]?.url || '') : 
+                      'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNTYiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjU2IiBoZWlnaHQ9IjU2IiBmaWxsPSIjREREREREIiAvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjEwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmaWxsPSIjNTU1Ij5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=' // Default SVG for no image initially
+                    }
                     alt={product.name}
-                    variant="rounded"
-                    sx={{ width: 56, height: 56, bgcolor: 'grey.200' }}
-                  >
-                    {!product.images || product.images.length === 0 ? <ImageIcon /> : null}
-                  </Avatar>
+                    sx={{
+                      width: 56,
+                      height: 56,
+                      objectFit: 'contain', // or 'cover' depending on desired behavior
+                      bgcolor: 'grey.200',
+                      borderRadius: 1
+                    }}
+                    onError={(e) => {
+                      e.target.onerror = null; // Prevent infinite loop
+                      e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNTYiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjU2IiBoZWlnaHQ9IjU2IiBmaWxsPSIjREREREREIiAvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjEwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBhbGlnbm1lbnQtYmFzZWxpbmU9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmaWxsPSIjNTU1Ij5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
+                    }}
+                  />
                 </TableCell>
                 <TableCell component="th" scope="row">
                   <Typography variant="subtitle2" noWrap>{product.name}</Typography>
-                  {/* <Typography variant="body2" color="text.secondary" noWrap>
-                    {product.brand ? product.brand.name : 'N/A'} 
-                  </Typography> */}
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    {product.brandName || 'N/A'} 
+                  </Typography>
                 </TableCell>
-                <TableCell>{product.category ? product.category.name : 'N/A'}</TableCell>
+                <TableCell>{product.categoryName || 'N/A'}</TableCell>
                 <TableCell>{formatCurrency(product.price)}</TableCell>
                 <TableCell align="center">{product.stockQuantity || 0}</TableCell>
                 <TableCell align="center">

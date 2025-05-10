@@ -21,6 +21,8 @@ import AdminOverview from './components/Admin/AdminOverview';
 import AdminUserManagement from './components/Admin/UserManagement/AdminUserManagement';
 import AdminProductManagement from './components/Admin/ProductManagement/AdminProductManagement';
 import ProductDetailPage from './pages/ProductDetailPage';
+import CategoryManagement from './components/Admin/CategoryManagement'; // <<< Import mới
+import BrandManagement from './components/Admin/BrandManagement'; // <<< Import mới
 
 function App() {
   return (
@@ -46,8 +48,12 @@ function App() {
               <Route path="overview" element={<AdminOverview />} />
               <Route path="users" element={<AdminUserManagement />} />
               <Route path="products" element={<AdminProductManagement />} />
+              <Route path="categories" element={<CategoryManagement />} />
+              <Route path="brands" element={<BrandManagement />} />
               {/* Các route admin con khác */} 
             </Route>
+            <Route path="/admin/categories" element={<CategoryManagement />} /> {/* <<< Route mới */} 
+            <Route path="/admin/brands" element={<BrandManagement />} /> {/* <<< Route mới */} 
             {/* Các route admin khác không dùng layout của dashboard (nếu có) */} 
           </Route>
         </Route>

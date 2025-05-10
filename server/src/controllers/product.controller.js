@@ -1,62 +1,184 @@
 // controllers/product.controller.js
 const Product = require('../models/Product');
+const Category = require('../models/Category');
+const Brand = require('../models/Brand');
 const Shop = require('../models/Shop');
-const Category = require('../models/Category'); // <<< THÊM IMPORT NÀY (điều chỉnh đường dẫn nếu cần)
-const Brand = require('../models/Brand');       // <<< THÊM IMPORT NÀY (điều chỉnh đường dẫn nếu cần)
 const mongoose = require('mongoose');
 
 // Tạo sản phẩm mới
-exports.createProduct = async (req, res, next) => {
+exports.createProduct = async (req, res) => {
   try {
-    const { name, description, price, stockQuantity, category, brand, images } = req.body;
-    
-    // Validation cơ bản
-    if (!name || !price) {
+    console.log('createProduct - Request body:', req.body);
+    console.log('createProduct - Files:', req.files);
+
+    // Kiểm tra xem người dùng có quyền tạo sản phẩm hay không
+    if (req.user.role !== 'seller' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Bạn không có quyền tạo sản phẩm.'
+      });
+    }
+
+    // Lấy dữ liệu từ request body
+    let { name, description, price, stockQuantity, category, brand } = req.body;
+    let images = [];
+
+    // Validate dữ liệu cơ bản
+    if (!name || !description || !price || !stockQuantity || !category) {
       return res.status(400).json({
         success: false,
-        message: 'Tên sản phẩm và giá không được bỏ trống'
+        message: 'Vui lòng cung cấp đầy đủ thông tin sản phẩm.'
       });
     }
     
-    // Tạo slug từ tên sản phẩm
-    const slug = name.toLowerCase().split(' ').join('-') + '-' + Date.now();
-    
-    // Lấy shop ID của người dùng (nếu là seller)
-    let shopId = null;
-    if (req.user.role === 'seller') {
-      const shop = await Shop.findOne({ user: req.user._id });
-      if (!shop) {
-        return res.status(400).json({
-          success: false,
-          message: 'Seller phải có shop trước khi tạo sản phẩm'
+    // Xử lý trường hợp category là tên thay vì ID
+    if (category && typeof category === 'string' && !mongoose.Types.ObjectId.isValid(category)) {
+      // Tìm category theo tên
+      const existingCategory = await Category.findOne({ name: { $regex: new RegExp('^' + category + '$', 'i') } });
+      
+      if (existingCategory) {
+        // Nếu tìm thấy category, sử dụng ID của nó
+        category = existingCategory._id;
+      } else {
+        // Nếu không tìm thấy, tạo category mới
+        const newCategory = await Category.create({
+          name: category,
+          slug: category.toLowerCase().split(' ').join('-') + '-' + Date.now()
         });
+        category = newCategory._id;
       }
-      shopId = shop._id;
     }
     
-    const product = await Product.create({
+    // Xử lý trường hợp brand là tên thay vì ID
+    if (brand && typeof brand === 'string' && !mongoose.Types.ObjectId.isValid(brand)) {
+      // Tìm brand theo tên
+      const existingBrand = await Brand.findOne({ name: { $regex: new RegExp('^' + brand + '$', 'i') } });
+      
+      if (existingBrand) {
+        // Nếu tìm thấy brand, sử dụng ID của nó
+        brand = existingBrand._id;
+      } else {
+        // Nếu không tìm thấy, tạo brand mới
+        const newBrand = await Brand.create({
+          name: brand,
+          slug: brand.toLowerCase().split(' ').join('-') + '-' + Date.now()
+        });
+        brand = newBrand._id;
+      }
+    }
+
+    // Tạo slug cho sản phẩm
+    const slug = name.toLowerCase().split(' ').join('-') + '-' + Date.now();
+
+    // Xử lý files ảnh được upload
+    if (req.files && req.files.length > 0) {
+      // Cập nhật đường dẫn của file để sử dụng trong server
+      images = req.files.map(file => `/uploads/${file.filename}`);
+      console.log('Processed image paths:', images);
+    }
+    
+    // Xử lý ảnh có sẵn được gửi dưới dạng JSON
+    if (req.body.images && req.body.images !== '{}' && Object.keys(req.body.images).length > 0) {
+      try {
+        // Kiểm tra nếu images là chuỗi JSON
+        if (typeof req.body.images === 'string') {
+          try {
+            const parsedImages = JSON.parse(req.body.images);
+            if (Array.isArray(parsedImages)) {
+              images = images.concat(parsedImages.filter(img => img && typeof img === 'string'));
+            } else if (parsedImages && typeof parsedImages === 'string') {
+              images.push(parsedImages);
+            }
+          } catch (e) {
+            // Nếu không phải JSON, xử lý như chuỗi thông thường
+            if (req.body.images && typeof req.body.images === 'string' && req.body.images.trim() !== '') {
+              images.push(req.body.images);
+            }
+          }
+        } else if (Array.isArray(req.body.images)) {
+          // Nếu là mảng, thêm các mục hợp lệ
+          images = images.concat(req.body.images.filter(img => img && typeof img === 'string'));
+        }
+      } catch (error) {
+        console.error('Error processing images from request body:', error);
+      }
+    }
+    
+    // Đảm bảo images là một mảng có các chuỗi hợp lệ
+    images = Array.isArray(images) ? images.filter(img => img && typeof img === 'string') : [];
+    
+    console.log('Final images:', images);
+
+    // Vấn đề: đảm bảo shopId có sẵn hoặc tạo mới
+    // Tìm hoặc tạo default shop cho admin user
+    let shopId = null;
+    
+    // Lấy shopId từ req.user nếu có
+    if (req.user.shopId && mongoose.Types.ObjectId.isValid(req.user.shopId)) {
+      shopId = req.user.shopId;
+    }
+
+    // Nếu không có shopId hợp lệ (trường hợp admin)
+    if (!shopId && req.user.role === 'admin') {
+      try {
+        // Tìm một shop bất kỳ để sử dụng
+        const shop = await Shop.findOne();
+        
+        if (shop) {
+          shopId = shop._id;
+        } else {
+          // Nếu không có shop nào, tạo shop mặc định
+          console.log('Creating default shop for new product');
+          const defaultShop = await Shop.create({
+            shopName: 'Default Shop',
+            description: 'Default shop for admin-created products',
+            user: req.user._id,
+            status: 'active',
+            contactEmail: req.user.email || 'admin@example.com',
+            contactPhone: '0123456789'
+          });
+          shopId = defaultShop._id;
+        }
+      } catch (error) {
+        console.error('Error finding or creating shop:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Lỗi khi tìm hoặc tạo shop: ' + error.message
+        });
+      }
+    }
+    
+    // Kiểm tra lần cuối để đảm bảo có shopId hợp lệ
+    if (!shopId || !mongoose.Types.ObjectId.isValid(shopId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Không tìm thấy hoặc không thể tạo shop cho sản phẩm này'
+      });
+    }
+
+    // Tạo sản phẩm mới
+    const newProduct = await Product.create({
       name,
       slug,
-      description: description || '',
+      description,
       price,
-      stockQuantity: stockQuantity || 0,
+      stockQuantity,
       category,
       brand,
-      images: images || [],
-      shop: shopId,
-      user: req.user._id
+      images,
+      shopId: shopId // Gán shopId đã tìm/tạo nếu cần
     });
-    
+
     res.status(201).json({
       success: true,
-      message: 'Tạo sản phẩm thành công',
-      data: product
+      message: 'Tạo sản phẩm thành công!',
+      data: newProduct
     });
   } catch (error) {
     console.error('Error creating product:', error);
     res.status(500).json({
       success: false,
-      message: 'Lỗi server khi tạo sản phẩm'
+      message: 'Lỗi Server khi tạo sản phẩm: ' + error.message
     });
   }
 };
@@ -145,49 +267,92 @@ exports.getProductById = async (req, res, next) => {
 // Cập nhật sản phẩm
 exports.updateProduct = async (req, res, next) => {
   try {
-    const product = await Product.findById(req.params.id);
+    console.log('Update product request body:', req.body);
+    console.log('Update product files:', req.files); // Ảnh mới upload
+
+    const productId = req.params.id; // Lấy id từ route params
+    const updateData = { ...req.body };
+
+    // XỬ LÝ SHOP ID
+    if (updateData.shopId) {
+      if (typeof updateData.shopId === 'object' && updateData.shopId._id) {
+        // Nếu shopId là một object có trường _id (ví dụ từ populate hoặc client gửi object)
+        updateData.shopId = updateData.shopId._id.toString();
+      } else if (typeof updateData.shopId === 'string' && !mongoose.Types.ObjectId.isValid(updateData.shopId)) {
+        // Nếu shopId là string nhưng không phải ObjectId hợp lệ (ví dụ: "[object Object]")
+        // thì có thể đây là lỗi gửi dữ liệu từ client, nên xóa hoặc xử lý đặc biệt.
+        // Trong trường hợp này, có thể client đã gửi sai, ta sẽ không cập nhật shopId.
+        console.warn(`Invalid shopId format received: ${updateData.shopId}. shopId will not be updated.`);
+        delete updateData.shopId;
+      }
+      // Nếu updateData.shopId đã là một chuỗi ObjectId hợp lệ, Mongoose sẽ tự xử lý.
+    }
+
+    // 1. Xử lý ảnh mới upload (nếu có)
+    let newImagePaths = [];
+    if (req.files && req.files.length > 0) {
+      newImagePaths = req.files.map(file => `/uploads/${file.filename}`);
+    }
+
+    // 2. Xử lý ảnh đã tồn tại (nếu có)
+    let existingImageUrls = [];
+    if (updateData.existingImages) {
+      // Đảm bảo existingImages luôn là một mảng để xử lý nhất quán
+      existingImageUrls = Array.isArray(updateData.existingImages)
+        ? updateData.existingImages
+        : [updateData.existingImages];
+      // Lọc bỏ các giá trị không hợp lệ (ví dụ: chuỗi rỗng) nếu cần
+      existingImageUrls = existingImageUrls.filter(url => typeof url === 'string' && url.trim() !== '');
+    }
+    // Xóa trường existingImages khỏi updateData vì nó đã được xử lý
+    delete updateData.existingImages;
+
+    // 3. Kết hợp ảnh cũ và ảnh mới vào trường 'images' của updateData
+    // Chỉ cập nhật trường images nếu có ảnh mới hoặc danh sách ảnh cũ được gửi lên
+    // Nếu không có ảnh mới và không có existingImages, chúng ta có thể muốn giữ lại images cũ của sản phẩm
+    // hoặc client nên gửi một mảng rỗng cho existingImages nếu muốn xóa hết ảnh.
+    // Hiện tại: luôn ghi đè images bằng sự kết hợp của ảnh cũ (từ form) và ảnh mới.
+    updateData.images = [...existingImageUrls, ...newImagePaths];
     
-    if (!product) {
+    console.log('Final images for update:', updateData.images);
+    console.log('Final update data:', updateData); // Log dữ liệu cuối cùng trước khi cập nhật
+
+    // Xử lý slug, brand, category (giữ nguyên logic cũ của bạn nếu có)
+    if (updateData.name) {
+      updateData.slug = updateData.name.toLowerCase().split(' ').join('-') + '-' + Date.now(); // Tạo slug cơ bản
+    }
+
+    if (updateData.brand && typeof updateData.brand === 'string') {
+      const brand = await Brand.findOne({ name: updateData.brand });
+      if (brand) updateData.brand = brand._id;
+      else delete updateData.brand; // Hoặc xử lý lỗi nếu brand không tìm thấy
+    }
+
+    if (updateData.category && typeof updateData.category === 'string') {
+      const category = await Category.findOne({ name: updateData.category });
+      if (category) updateData.category = category._id;
+      else delete updateData.category; // Hoặc xử lý lỗi
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(productId, updateData, { new: true, runValidators: true });
+
+    if (!updatedProduct) {
+      // Thay thế AppError bằng Error thông thường
       return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy sản phẩm với ID này'
+        status: 'error',
+        message: 'No product found with that ID'
       });
     }
-    
-    // Kiểm tra quyền - chỉ seller sở hữu sản phẩm mới được cập nhật
-    if (req.user.role === 'seller') {
-      const shop = await Shop.findOne({ user: req.user._id });
-      
-      if (!shop || !product.shop.equals(shop._id)) {
-        return res.status(403).json({
-          success: false,
-          message: 'Bạn không có quyền cập nhật sản phẩm này'
-        });
-      }
-    }
-    
-    // Cập nhật slug nếu tên thay đổi
-    if (req.body.name && req.body.name !== product.name) {
-      req.body.slug = req.body.name.toLowerCase().split(' ').join('-') + '-' + Date.now();
-    }
-    
-    const updatedProduct = await Product.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-    
+
     res.status(200).json({
-      success: true,
-      message: 'Cập nhật sản phẩm thành công',
-      data: updatedProduct
+      status: 'success',
+      data: {
+        product: updatedProduct,
+      },
     });
   } catch (error) {
-    console.error('Error updating product:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Lỗi server khi cập nhật sản phẩm'
-    });
+    console.error('Error updating product:', error); // Thêm log lỗi chi tiết
+    next(error);
   }
 };
 
@@ -230,6 +395,34 @@ exports.deleteProduct = async (req, res, next) => {
   }
 };
 
+// Xóa tất cả sản phẩm (chỉ dành cho admin)
+exports.deleteAllProducts = async (req, res, next) => {
+  try {
+    // Kiểm tra xem người dùng có phải là admin hay không
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Chỉ admin mới có quyền xóa tất cả sản phẩm'
+      });
+    }
+    
+    // Xóa tất cả sản phẩm
+    const result = await Product.deleteMany({});
+    
+    res.status(200).json({
+      success: true,
+      message: `Đã xóa thành công ${result.deletedCount} sản phẩm`,
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error('Error deleting all products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi xóa tất cả sản phẩm'
+    });
+  }
+};
+
 // HÀM MỚI CHO VIỆC IMPORT SẢN PHẨM
 exports.importProducts = async (req, res, next) => {
   console.log('--- Received request at /api/products/import ---');
@@ -268,7 +461,7 @@ exports.importProducts = async (req, res, next) => {
     }
 
     // Tìm một default shop cho admin user để sử dụng khi import
-    // Đây là giải pháp tạm thời - thực tế nên có logic để admin chọn shop
+    // Đây là giải pháp tạm thởi - thực tế nên có logic để admin chọn shop
     let defaultShop = null;
     try {
       if (req.user && req.user.role === 'admin') {

@@ -31,8 +31,7 @@ const categorySchema = new Schema({
     collection: 'Categories'
 });
 
-// Có thể thêm index cho slug để tìm kiếm nhanh hơn
-categorySchema.index({ slug: 1 });
+// Không cần index slug vì đã được đánh index tự động qua unique: true
 
 const Category = mongoose.model('Category', categorySchema); // map với collection 'categories'
 module.exports = Category;

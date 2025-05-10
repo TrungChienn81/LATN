@@ -26,7 +26,7 @@ const brandSchema = new Schema({
     timestamps: true
 });
 
-brandSchema.index({ slug: 1 });
+// Không cần index slug vì đã được đánh index tự động qua unique: true
 
 const Brand = mongoose.model('Brand', brandSchema); // map với collection 'brands'
 module.exports = Brand;

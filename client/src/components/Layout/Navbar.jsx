@@ -21,6 +21,7 @@ import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import StorefrontIcon from '@mui/icons-material/Storefront';
 
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -191,6 +192,17 @@ function Navbar() {
                   {user.role === 'admin' && (
                     <MenuItem component={RouterLink} to="/admin/dashboard" onClick={handleMenuClose}>
                       <AdminPanelSettingsIcon sx={{ mr: 1 }} /> Admin Dashboard
+                    </MenuItem>
+                  )}
+                  {user.role === 'admin' && (
+                    <MenuItem component={RouterLink} to="/admin/categories" onClick={handleMenuClose}>
+                      {/* Icon gì đó cho category, ví dụ CategoryIcon, hoặc để trống */} 
+                      Quản lý Danh mục
+                    </MenuItem>
+                  )}
+                  {user.role === 'admin' && (
+                    <MenuItem component={RouterLink} to="/admin/brands" onClick={handleMenuClose}>
+                      <StorefrontIcon sx={{ mr: 1 }} /> Quản lý Thương hiệu
                     </MenuItem>
                   )}
                   <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
