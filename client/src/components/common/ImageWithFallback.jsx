@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box } from '@mui/material';
 
 /**
- * Simple image component with pure CSS fallback
+ * Enhanced image component with fallback handling and URL normalization
  */
 const ImageWithFallback = (props) => {
   const { 
@@ -12,8 +12,10 @@ const ImageWithFallback = (props) => {
     ...rest 
   } = props;
   
-  // Nếu không có ảnh, hiển thị placeholder
-  if (!src) {
+  const [hasError, setHasError] = useState(false);
+  
+  // Nếu không có ảnh hoặc đã xảy ra lỗi, hiển thị placeholder
+  if (!src || hasError) {
     return (
       <Box
         sx={{
@@ -38,15 +40,55 @@ const ImageWithFallback = (props) => {
 
   // Chuẩn bị URL
   let imageSrc = src;
-  if (!src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:')) {
-    // For relative paths
-    const apiBaseUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
-    imageSrc = src.startsWith('/') ? `${apiBaseUrl}${src}` : `${apiBaseUrl}/${src}`;
+  
+  // Xử lý các trường hợp URL
+  if (src) {
+    try {
+      // Handle URLs that might start with // (protocol-relative)
+      if (src.startsWith('//')) {
+        imageSrc = `https:${src}`;
+      } 
+      // Handle absolute URLs (http, https, data, blob)
+      else if (src.startsWith('http') || src.startsWith('data:') || src.startsWith('blob:')) {
+        imageSrc = src;
+      }
+      // Handle local server uploads (/uploads/...)
+      else if (src.startsWith('/uploads/')) {
+        const apiBaseUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
+        imageSrc = `${apiBaseUrl}${src}`;
+      }
+      // Handle URLs that might be missing the protocol
+      else if (src.includes('cdn.') || src.includes('.com/') || src.includes('.net/') || src.includes('.org/')) {
+        imageSrc = src.startsWith('www.') ? `https://${src}` : src;
+        if (!imageSrc.startsWith('http')) {
+          imageSrc = `https://${imageSrc}`;
+        }
+      }
+      // Handle other relative paths
+      else if (!src.match(/^[a-z]+:/i)) {
+        const apiBaseUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
+        imageSrc = src.startsWith('/') ? `${apiBaseUrl}${src}` : `${apiBaseUrl}/${src}`;
+      }
+    } catch (error) {
+      console.error('Error processing image URL:', error);
+      imageSrc = src; // Fallback to original source on error
+    }
+    
+    // Log the image source for debugging
+    console.log(`Image source: ${src} → ${imageSrc}`);
   }
 
-  // Render image with inline error handler
+  // Render image with error handler
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', ...sx }}>
+    <Box 
+      sx={{
+        position: 'relative', 
+        overflow: 'hidden',
+        width: sx.width || '100%',
+        height: sx.height || '100%',
+        ...sx
+      }}
+    >
       <img
         src={imageSrc}
         alt={alt}
@@ -57,29 +99,15 @@ const ImageWithFallback = (props) => {
           display: 'block',
         }}
         onError={(e) => {
-          // Pure DOM approach - replace image with div
-          const parent = e.target.parentNode;
-          if (parent) {
-            // Create fallback div
-            const fallback = document.createElement('div');
-            fallback.style.width = '100%';
-            fallback.style.height = '100%';
-            fallback.style.display = 'flex';
-            fallback.style.alignItems = 'center';
-            fallback.style.justifyContent = 'center';
-            fallback.style.backgroundColor = '#f0f0f0';
-            fallback.style.color = '#757575';
-            fallback.style.fontSize = '12px';
-            fallback.textContent = 'No Image';
-            
-            // Replace img with div
-            parent.replaceChild(fallback, e.target);
-          }
+          console.log(`Image failed to load: ${imageSrc}`);
+          setHasError(true);
         }}
         {...rest}
       />
-    </div>
+    </Box>
   );
 };
 
+// Provide both named and default exports
+export { ImageWithFallback };
 export default ImageWithFallback;

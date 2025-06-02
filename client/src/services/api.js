@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL, // Lấy URL từ biến môi trường
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api', // Thêm fallback URL
   // Không đặt Content-Type mặc định để axios tự động xác định header phù hợp
   // Khi gửi FormData, axios sẽ tự động đặt 'Content-Type': 'multipart/form-data'
   // Khi gửi JSON, axios sẽ tự động đặt 'Content-Type': 'application/json'

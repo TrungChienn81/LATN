@@ -1,36 +1,21 @@
 // src/routes/order.routes.js
 const express = require('express');
-const router = express.Router();
 const orderController = require('../controllers/order.controller');
-const { protect, restrictTo } = require('../middleware/auth.middleware');
+const { protect } = require('../middleware/auth.middleware');
 
-// Apply authentication middleware to all routes
+const router = express.Router();
+
+// Protect all order routes
 router.use(protect);
 
-// Create new order (Customers only)
-router.post(
-    '/', 
-    restrictTo('customer'), 
-    orderController.createOrder
-);
+// Customer routes
+router.post('/', orderController.createOrder);
+router.get('/my-orders', orderController.getUserOrders);
+router.get('/:id', orderController.getOrder);
+router.put('/:id/cancel', orderController.cancelOrder);
 
-// Get user's order history
-router.get(
-    '/my', 
-    orderController.getMyOrders
-);
-
-// Get specific order details
-router.get(
-    '/:orderId', 
-    orderController.getOrderById
-);
-
-// Update order status (Admin/Seller only)
-router.put(
-    '/:orderId/status',
-    restrictTo('admin', 'seller'),
-    orderController.updateOrderStatus
-);
+// Shop routes
+router.get('/shop/orders', orderController.getShopOrders);
+router.put('/shop/:id/status', orderController.updateOrderStatus);
 
 module.exports = router;

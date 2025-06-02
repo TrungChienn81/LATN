@@ -12,7 +12,8 @@ import {
   styled, 
   Container,
   Menu,
-  MenuItem
+  MenuItem,
+  Badge
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import SearchIcon from '@mui/icons-material/Search';
@@ -24,6 +25,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 
 import { useAuth } from '../../contexts/AuthContext';
+import { useCart } from '../../contexts/CartContext';
 
 // Search styling
 const Search = styled('div')(({ theme }) => ({
@@ -66,6 +68,7 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
 
 function Navbar() {
   const { isAuthenticated, user, logout } = useAuth();
+  const { cartCount } = useCart();
   const [anchorEl, setAnchorEl] = React.useState(null);
 
   const handleMenuOpen = (event) => {
@@ -153,7 +156,9 @@ function Navbar() {
               component={RouterLink}
               to="/cart"
             >
-              <ShoppingCartOutlinedIcon />
+              <Badge badgeContent={cartCount} color="secondary">
+                <ShoppingCartOutlinedIcon />
+              </Badge>
             </IconButton>
 
             {isAuthenticated && user ? (
@@ -189,22 +194,22 @@ function Navbar() {
                   </MenuItem>
                   <MenuItem component={RouterLink} to="/profile" onClick={handleMenuClose}>Tài khoản của tôi</MenuItem>
                   <MenuItem component={RouterLink} to="/orders" onClick={handleMenuClose}>Đơn hàng</MenuItem>
+                  
+                  {/* Shop Menu Items */}
+                  <MenuItem
+                    component={RouterLink}
+                    to="/my-shop"
+                    onClick={handleMenuClose}
+                  >
+                    <StorefrontIcon sx={{ mr: 1 }} /> Gian hàng của tôi
+                  </MenuItem>
+                  
                   {user.role === 'admin' && (
                     <MenuItem component={RouterLink} to="/admin/dashboard" onClick={handleMenuClose}>
                       <AdminPanelSettingsIcon sx={{ mr: 1 }} /> Admin Dashboard
                     </MenuItem>
                   )}
-                  {user.role === 'admin' && (
-                    <MenuItem component={RouterLink} to="/admin/categories" onClick={handleMenuClose}>
-                      {/* Icon gì đó cho category, ví dụ CategoryIcon, hoặc để trống */} 
-                      Quản lý Danh mục
-                    </MenuItem>
-                  )}
-                  {user.role === 'admin' && (
-                    <MenuItem component={RouterLink} to="/admin/brands" onClick={handleMenuClose}>
-                      <StorefrontIcon sx={{ mr: 1 }} /> Quản lý Thương hiệu
-                    </MenuItem>
-                  )}
+
                   <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
                     <ExitToAppIcon sx={{ mr: 1 }} /> Đăng xuất
                   </MenuItem>

@@ -7,6 +7,20 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Hàm để tìm cổng trống nếu cổng mặc định đã bị sử dụng
+const findAvailablePort = (startPort) => {
+    return new Promise((resolve) => {
+        const server = require('http').createServer();
+        server.listen(startPort, () => {
+            const port = server.address().port;
+            server.close(() => resolve(port));
+        });
+        server.on('error', () => {
+            resolve(findAvailablePort(startPort + 1));
+        });
+    });
+};
+
 // Middleware cơ bản
 app.use(cors()); // Cho phép truy cập từ tên miền khác (frontend)
 app.use(express.json()); // Parse JSON request body
@@ -15,10 +29,30 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bo
 // Phục vụ tệp tĩnh từ thư mục uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Kết nối MongoDB
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('MongoDB connected successfully!'))
-    .catch(err => console.error('MongoDB connection error:', err));
+// Kết nối MongoDB với các tùy chọn được hỗ trợ trong phiên bản mới
+mongoose.connect(process.env.MONGODB_URI, {
+    // Tùy chọn cho Driver
+    connectTimeoutMS: 30000,         // Tăng thời gian timeout kết nối lên 30 giây
+    socketTimeoutMS: 45000,          // Tăng thời gian chờ socket lên 45 giây
+    serverSelectionTimeoutMS: 30000, // Thời gian chờ trước khi timeout một thao tác
+    maxPoolSize: 50,                 // Tăng số request đồng thời tối đa (thay thế poolSize)
+    minPoolSize: 5,                  // Số kết nối tối thiểu trong pool
+    heartbeatFrequencyMS: 10000,     // Tần suất hoạt động heartbeat
+    retryWrites: true,               // Tự động thử lại các thao tác ghi khi mất kết nối
+    // Tùy chọn ứng dụng
+    appName: 'Laptop-AI-Commerce'    // Tên ứng dụng (giúp theo dõi trong logs MongoDB)
+})
+.then(() => console.log('MongoDB connected successfully!'))
+.catch(err => {
+    console.error('MongoDB connection error:', err);
+    // Log thêm các thông tin chi tiết về lỗi
+    if (err.name === 'MongooseTimeoutError' || err.name === 'MongoTimeoutError') {
+        console.error('Timeout khi kết nối đến MongoDB. Hãy kiểm tra:');
+        console.error('1. Địa chỉ MongoDB URI có chính xác không');
+        console.error('2. MongoDB server có đang chạy không');
+        console.error('3. Có vấn đề về mạng hoặc tường lửa không');
+    }
+});
     // ---- Các Routes API sẽ được thêm vào đây ----
     const authRoutes = require('./routes/auth.routes'); // Import auth routes
     const productRoutes = require('./routes/product.routes'); // Import product routes
@@ -39,7 +73,14 @@ mongoose.connect(process.env.MONGODB_URI)
     app.use('/api/categories', categoryRoutes);
     app.use('/api/brands', brandRoutes);
     
-    // Khởi động server
-    app.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
-    });
+    // Khởi động server với cổng tự động tìm nếu cổng mặc định bị sử dụng
+    (async () => {
+        try {
+            const availablePort = await findAvailablePort(PORT);
+            app.listen(availablePort, () => {
+                console.log(`Server is running on port ${availablePort}`);
+            });
+        } catch (error) {
+            console.error('Failed to start server:', error);
+        }
+    })();

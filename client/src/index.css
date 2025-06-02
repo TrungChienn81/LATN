@@ -84,6 +84,50 @@ button:focus-visible {
   background: #555;
 }
 
+/* Global Grid Fixes for consistent product card layout - 5 products per row */
+.product-grid-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.product-grid-item {
+  display: flex !important;
+  width: 100% !important;
+  min-height: 380px !important;
+  padding: 6px !important;
+  box-sizing: border-box !important;
+  flex: 0 0 20% !important; /* 5 columns = 20% each */
+  max-width: 20% !important;
+}
+
+.product-card-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 380px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 960px) {
+  .product-grid-item {
+    flex: 0 0 25% !important; /* 4 columns on medium screens */
+    max-width: 25% !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .product-grid-item {
+    flex: 0 0 50% !important; /* 2 columns on small screens */
+    max-width: 50% !important;
+  }
+}
+
 /* Print styles */
 @media print {
   body {

@@ -2,106 +2,208 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-// Schema cho từng sản phẩm trong đơn hàng (snapshot)
 const orderItemSchema = new Schema({
-    productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
-    shopId: { type: Schema.Types.ObjectId, ref: 'Shop', required: true },
-    productName: { type: String, required: true }, // Snapshot
-    productImage: { type: String }, // Snapshot
-    quantity: { type: Number, required: true, min: 1 },
-    price: { type: Number, required: true }, // Snapshot giá tại thời điểm đặt
-    specificationsSnapshot: { type: Object } // Snapshot cấu hình
-}, { _id: false });
+  product: {
+    type: Schema.Types.ObjectId,
+    ref: 'Product',
+    required: true
+  },
+  productName: {
+    type: String,
+    required: true // Lưu tên sản phẩm để tránh mất dữ liệu khi sản phẩm bị xóa
+  },
+  productImage: {
+    type: String // Lưu ảnh chính của sản phẩm
+  },
+  shop: {
+    type: Schema.Types.ObjectId,
+    ref: 'Shop',
+    required: true
+  },
+  shopName: {
+    type: String,
+    required: true
+  },
+  quantity: {
+    type: Number,
+    required: true,
+    min: 1
+  },
+  price: {
+    type: Number,
+    required: true // Giá tại thời điểm đặt hàng
+  },
+  totalPrice: {
+    type: Number,
+    required: true // price * quantity
+  }
+});
 
-// Schema cho địa chỉ giao hàng (snapshot)
 const shippingAddressSchema = new Schema({
-    name: { type: String, required: true },
-    phone: { type: String, required: true },
+  fullName: {
+    type: String,
+    required: true
+  },
+  phoneNumber: {
+    type: String,
+    required: true
+  },
+  address: {
     street: { type: String, required: true },
     city: { type: String, required: true },
-    district: { type: String, required: true },
-    ward: { type: String, required: true }
+    district: { type: String },
+    ward: { type: String },
+    postalCode: { type: String }
+  }
 }, { _id: false });
 
 const orderSchema = new Schema({
-    orderCode: { // Mã đơn hàng tự tạo, vd: HD0000123
-        type: String,
-        required: true,
-        unique: true
+  orderNumber: {
+    type: String,
+    unique: true,
+    required: true
+  },
+  customer: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  customerInfo: {
+    name: String,
+    email: String,
+    phone: String
+  },
+  items: [orderItemSchema],
+  
+  // Thông tin giao hàng
+  shippingAddress: shippingAddressSchema,
+  
+  // Thông tin thanh toán
+  paymentMethod: {
+    type: String,
+    enum: ['cod', 'bank_transfer', 'momo', 'zalopay', 'vnpay'],
+    default: 'cod'
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'failed', 'refunded'],
+    default: 'pending'
+  },
+  
+  // Trạng thái đơn hàng
+  orderStatus: {
+    type: String,
+    enum: ['pending', 'confirmed', 'processing', 'shipping', 'delivered', 'cancelled'],
+    default: 'pending'
+  },
+  
+  // Giá cả
+  subtotal: {
+    type: Number,
+    required: true
+  },
+  shippingFee: {
+    type: Number,
+    default: 0
+  },
+  totalAmount: {
+    type: Number,
+    required: true
+  },
+  
+  // Thời gian
+  orderDate: {
+    type: Date,
+    default: Date.now
+  },
+  confirmedAt: Date,
+  shippedAt: Date,
+  deliveredAt: Date,
+  cancelledAt: Date,
+  
+  // Ghi chú
+  notes: String,
+  cancelReason: String,
+  
+  // Theo dõi
+  trackingNumber: String,
+  
+  // Shops liên quan (để phân chia đơn hàng theo shop)
+  shops: [{
+    shop: {
+      type: Schema.Types.ObjectId,
+      ref: 'Shop'
     },
-    userId: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    },
-    items: [orderItemSchema],
-    shippingAddress: {
-        type: shippingAddressSchema,
-        required: true
-    },
-    shippingFee: {
-        type: Number,
-        required: true,
-        default: 0
-    },
-    totalAmount: { // Tổng tiền hàng (chưa gồm ship, giảm giá)
-        type: Number,
-        required: true
-    },
-    discountAmount: {
-        type: Number,
-        default: 0
-    },
-    finalAmount: { // Số tiền cuối cùng khách trả
-        type: Number,
-        required: true
-    },
-    paymentMethod: {
-        type: String,
-        enum: ['COD', 'Momo', 'VNPay', 'BankTransfer'], // Thêm các phương thức khác nếu cần
-        required: true
-    },
-    paymentStatus: {
-        type: String,
-        enum: ['pending', 'paid', 'failed', 'refunded'],
-        default: 'pending'
-    },
-    paymentTransactionId: { // Mã giao dịch từ cổng thanh toán
-        type: String
-    },
-    orderStatus: {
-        type: String,
-        enum: [
-            'pending_confirmation', // Chờ xác nhận (từ shop hoặc admin)
-            'processing',           // Đang xử lý (shop chuẩn bị hàng)
-            'shipped',              // Đã giao vận chuyển
-            'delivered',            // Đã giao thành công
-            'cancelled_by_user',    // Khách hủy
-            'cancelled_by_seller',  // Shop hủy
-            'returned'              // Trả hàng
-        ],
-        default: 'pending_confirmation'
-    },
-    /* // Optional: Nếu muốn track status theo từng shop
-    shopOrderStatus: [{
-        shopId: { type: Schema.Types.ObjectId, ref: 'Shop' },
-        status: { type: String } // Trạng thái xử lý của shop đó
-    }],
-    */
-    notes: { // Ghi chú của khách hàng
-        type: String
-    },
-    trackingCode: { // Mã vận đơn
-        type: String
+    items: [String], // Array of item IDs belonging to this shop
+    subtotal: Number,
+    status: {
+      type: String,
+      enum: ['pending', 'confirmed', 'processing', 'shipping', 'delivered', 'cancelled'],
+      default: 'pending'
     }
+  }]
 }, {
-    timestamps: true,
-    collection: 'Orders'
+  timestamps: true,
+  collection: 'Orders'
 });
 
-// Không cần index orderCode vì đã được đánh index tự động qua unique: true
-orderSchema.index({ userId: 1 });
-orderSchema.index({ 'items.shopId': 1 }); // Index shopId trong items nếu cần query theo shop
+// Generate order number
+orderSchema.pre('save', function(next) {
+  if (!this.orderNumber) {
+    const timestamp = Date.now().toString();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    this.orderNumber = `ORD${timestamp.slice(-8)}${random}`;
+  }
+  
+  // Calculate totals
+  this.subtotal = this.items.reduce((total, item) => total + item.totalPrice, 0);
+  this.totalAmount = this.subtotal + this.shippingFee;
+  
+  next();
+});
 
-const Order = mongoose.model('Order', orderSchema); // map với collection 'orders'
+// Indexes for better query performance
+orderSchema.index({ customer: 1, createdAt: -1 });
+orderSchema.index({ orderNumber: 1 });
+orderSchema.index({ orderStatus: 1 });
+orderSchema.index({ 'shops.shop': 1 });
+
+// Methods
+orderSchema.methods.updateStatus = function(newStatus, shopId = null) {
+  if (shopId) {
+    // Update status for specific shop
+    const shopOrder = this.shops.find(s => s.shop.toString() === shopId.toString());
+    if (shopOrder) {
+      shopOrder.status = newStatus;
+    }
+  } else {
+    // Update overall order status
+    this.orderStatus = newStatus;
+    
+    // Set timestamps
+    const now = new Date();
+    switch (newStatus) {
+      case 'confirmed':
+        this.confirmedAt = now;
+        break;
+      case 'shipping':
+        this.shippedAt = now;
+        break;
+      case 'delivered':
+        this.deliveredAt = now;
+        break;
+      case 'cancelled':
+        this.cancelledAt = now;
+        break;
+    }
+  }
+  
+  return this.save();
+};
+
+orderSchema.methods.canBeCancelled = function() {
+  return ['pending', 'confirmed'].includes(this.orderStatus);
+};
+
+const Order = mongoose.model('Order', orderSchema);
 module.exports = Order;

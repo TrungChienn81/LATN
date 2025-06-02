@@ -195,6 +195,23 @@ exports.getAllProducts = async (req, res, next) => {
     const excludedFields = ['page', 'sort', 'limit', 'fields'];
     excludedFields.forEach(el => delete queryObj[el]);
     
+    // Xử lý filter đặc biệt cho shopId
+    if (queryObj.shopId) {
+      // Đảm bảo shopId hợp lệ
+      if (!mongoose.Types.ObjectId.isValid(queryObj.shopId)) {
+        // Nếu shopId không hợp lệ, trả về mảng rỗng
+        return res.status(200).json({
+          success: true,
+          count: 0,
+          total: 0,
+          totalPages: 0,
+          currentPage: page,
+          data: []
+        });
+      }
+      // Mongoose sẽ tự động convert string thành ObjectId
+    }
+    
     // Xử lý toán tử filter như gte, gt, lte, lt
     let queryStr = JSON.stringify(queryObj);
     queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, match => `$${match}`);
@@ -205,7 +222,7 @@ exports.getAllProducts = async (req, res, next) => {
       .limit(limit)
       .populate('category', 'name')
       .populate('brand', 'name')
-      .populate('shopId', 'shopName');
+      .populate('shopId', 'shopName ownerId status rating');
     
     // Sắp xếp
     if (req.query.sort) {
@@ -217,15 +234,23 @@ exports.getAllProducts = async (req, res, next) => {
     
     // Thực thi query
     const products = await query;
+    
+    // Map products để có trường shop thay vì shopId
+    const formattedProducts = products.map(product => {
+      const productObj = product.toObject();
+      productObj.shop = productObj.shopId; // Copy shopId data to shop field
+      return productObj;
+    });
+    
     const total = await Product.countDocuments(JSON.parse(queryStr));
     
     res.status(200).json({
       success: true,
-      count: products.length,
+      count: formattedProducts.length,
       total,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
-      data: products
+      data: formattedProducts
     });
   } catch (error) {
     console.error('Error fetching products:', error);
@@ -242,7 +267,7 @@ exports.getProductById = async (req, res, next) => {
     const product = await Product.findById(req.params.id)
       .populate('category', 'name')
       .populate('brand', 'name')
-      .populate('shopId', 'shopName');
+      .populate('shopId', 'shopName ownerId status rating');
     
     if (!product) {
       return res.status(404).json({
@@ -251,9 +276,13 @@ exports.getProductById = async (req, res, next) => {
       });
     }
     
+    // Format product để có trường shop
+    const productObj = product.toObject();
+    productObj.shop = productObj.shopId;
+    
     res.status(200).json({
       success: true,
-      data: product
+      data: productObj
     });
   } catch (error) {
     console.error('Error fetching product by ID:', error);
@@ -267,10 +296,43 @@ exports.getProductById = async (req, res, next) => {
 // Cập nhật sản phẩm
 exports.updateProduct = async (req, res, next) => {
   try {
+    console.log('=== UPDATE PRODUCT DEBUG ===');
+    console.log('User:', { id: req.user._id, role: req.user.role });
+    console.log('Product ID:', req.params.id);
     console.log('Update product request body:', req.body);
     console.log('Update product files:', req.files); // Ảnh mới upload
 
     const productId = req.params.id; // Lấy id từ route params
+    
+    // Kiểm tra xem product có tồn tại không
+    const existingProduct = await Product.findById(productId);
+    if (!existingProduct) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy sản phẩm với ID này'
+      });
+    }
+    
+    console.log('Product found:', { id: existingProduct._id, name: existingProduct.name, shopId: existingProduct.shopId });
+    
+    // Kiểm tra quyền - admin có thể update bất kỳ, seller chỉ update được của mình
+    if (req.user.role === 'seller') {
+      console.log('User is seller, checking shop ownership...');
+      const shop = await Shop.findOne({ ownerId: req.user._id });
+      console.log('User shop:', shop ? { id: shop._id, name: shop.shopName } : 'No shop found');
+      
+      if (!shop || !existingProduct.shopId.equals(shop._id)) {
+        console.log('Access denied: User does not own this product');
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn không có quyền cập nhật sản phẩm này'
+        });
+      }
+      console.log('Shop ownership verified');
+    } else {
+      console.log('User is admin, allowing update');
+    }
+    
     const updateData = { ...req.body };
 
     // XỬ LÝ SHOP ID
@@ -303,18 +365,28 @@ exports.updateProduct = async (req, res, next) => {
         : [updateData.existingImages];
       // Lọc bỏ các giá trị không hợp lệ (ví dụ: chuỗi rỗng) nếu cần
       existingImageUrls = existingImageUrls.filter(url => typeof url === 'string' && url.trim() !== '');
+      // Xóa trường existingImages khỏi updateData vì nó đã được xử lý và sẽ được gán vào updateData.images
+      delete updateData.existingImages;
     }
-    // Xóa trường existingImages khỏi updateData vì nó đã được xử lý
-    delete updateData.existingImages;
 
     // 3. Kết hợp ảnh cũ và ảnh mới vào trường 'images' của updateData
-    // Chỉ cập nhật trường images nếu có ảnh mới hoặc danh sách ảnh cũ được gửi lên
-    // Nếu không có ảnh mới và không có existingImages, chúng ta có thể muốn giữ lại images cũ của sản phẩm
-    // hoặc client nên gửi một mảng rỗng cho existingImages nếu muốn xóa hết ảnh.
-    // Hiện tại: luôn ghi đè images bằng sự kết hợp của ảnh cũ (từ form) và ảnh mới.
-    updateData.images = [...existingImageUrls, ...newImagePaths];
+    const combinedImages = [...existingImageUrls, ...newImagePaths];
+
+    // Chỉ cập nhật trường 'images' nếu có ảnh mới được upload,
+    // hoặc nếu client chủ động gửi một mảng (có thể rỗng) cho existingImageUrls.
+    // Nếu không có ảnh mới (newImagePaths rỗng) VÀ không có existingImageUrls nào được client gửi lên
+    // (tức là client không muốn thay đổi ảnh), thì KHÔNG cập nhật trường images.
+    if (newImagePaths.length > 0 || (updateData.existingImages !== undefined || req.body.existingImages !== undefined)) {
+      updateData.images = combinedImages;
+    } else {
+      // Nếu không có ảnh mới và client cũng không gửi 'existingImages',
+      // thì không chạm vào trường 'images' của sản phẩm, giữ nguyên ảnh cũ.
+      // Do đó, ta xóa 'images' khỏi updateData để nó không bị ghi đè.
+      delete updateData.images;
+      console.log('No new images and no existingImages field sent by client. Preserving original images.');
+    }
     
-    console.log('Final images for update:', updateData.images);
+    console.log('Final images for update (if any):', updateData.images);
     console.log('Final update data:', updateData); // Log dữ liệu cuối cùng trước khi cập nhật
 
     // Xử lý slug, brand, category (giữ nguyên logic cũ của bạn nếu có)
@@ -337,28 +409,35 @@ exports.updateProduct = async (req, res, next) => {
     const updatedProduct = await Product.findByIdAndUpdate(productId, updateData, { new: true, runValidators: true });
 
     if (!updatedProduct) {
-      // Thay thế AppError bằng Error thông thường
       return res.status(404).json({
-        status: 'error',
-        message: 'No product found with that ID'
+        success: false,
+        message: 'Không tìm thấy sản phẩm với ID này'
       });
     }
 
+    console.log('Product updated successfully:', updatedProduct.name);
+
     res.status(200).json({
-      status: 'success',
-      data: {
-        product: updatedProduct,
-      },
+      success: true,
+      message: 'Cập nhật sản phẩm thành công',
+      data: updatedProduct
     });
   } catch (error) {
     console.error('Error updating product:', error); // Thêm log lỗi chi tiết
-    next(error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi cập nhật sản phẩm: ' + error.message
+    });
   }
 };
 
 // Xóa sản phẩm
 exports.deleteProduct = async (req, res, next) => {
   try {
+    console.log('=== DELETE PRODUCT DEBUG ===');
+    console.log('User:', { id: req.user._id, role: req.user.role });
+    console.log('Product ID:', req.params.id);
+    
     const product = await Product.findById(req.params.id);
     
     if (!product) {
@@ -368,19 +447,28 @@ exports.deleteProduct = async (req, res, next) => {
       });
     }
     
+    console.log('Product found:', { id: product._id, name: product.name, shopId: product.shopId });
+    
     // Kiểm tra quyền - admin có thể xóa bất kỳ, seller chỉ xóa được của mình
     if (req.user.role === 'seller') {
-      const shop = await Shop.findOne({ user: req.user._id });
+      console.log('User is seller, checking shop ownership...');
+      const shop = await Shop.findOne({ ownerId: req.user._id });
+      console.log('User shop:', shop ? { id: shop._id, name: shop.shopName } : 'No shop found');
       
-      if (!shop || !product.shop.equals(shop._id)) {
+      if (!shop || !product.shopId.equals(shop._id)) {
+        console.log('Access denied: User does not own this product');
         return res.status(403).json({
           success: false,
           message: 'Bạn không có quyền xóa sản phẩm này'
         });
       }
+      console.log('Shop ownership verified');
+    } else {
+      console.log('User is admin, allowing delete');
     }
     
     await Product.findByIdAndDelete(req.params.id);
+    console.log('Product deleted successfully');
     
     res.status(200).json({
       success: true,

@@ -1,4 +1,16 @@
 // src/middleware/auth.middleware.js
+
+/*
+ * ROLE HIERARCHY & PRIVILEGES:
+ * 
+ * 🛒 customer: Có thể mua sản phẩm, xem products, thêm vào cart, tạo orders
+ * 🏪 seller: Có TẤT CẢ quyền của customer + quản lý shop riêng (CRUD products, view shop analytics)
+ * 👑 admin: Có TẤT CẢ quyền + quản lý toàn hệ thống (user management, shop management, system settings)
+ * 
+ * LƯU Ý: Khi user tạo shop → role chuyển từ customer thành seller
+ * Seller vẫn giữ đầy đủ chức năng mua hàng như customer!
+ */
+
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { promisify } = require('util');

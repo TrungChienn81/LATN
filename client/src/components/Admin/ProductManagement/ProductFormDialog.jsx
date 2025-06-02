@@ -21,7 +21,9 @@ import {
 } from '@mui/material';
 import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
 import CancelIcon from '@mui/icons-material/Cancel';
-import ImageWithFallback from '../../common/ImageWithFallback';
+import { ImageWithFallback } from '../../common/ImageWithFallback';
+import { Close as CloseIcon } from '@mui/icons-material';
+import { convertVNDToMillions } from '../../../utils/formatters';
 
 const ProductFormDialog = ({ 
   open, 
@@ -33,21 +35,39 @@ const ProductFormDialog = ({
   categories = [], 
   brands = [] 
 }) => {
-  const [formData, setFormData] = useState({});
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    price: '',
+    stockQuantity: 0,
+    category: '',
+    brand: '',
+  });
   const [imagePreviews, setImagePreviews] = useState([]);
   const [errors, setErrors] = useState({});
 
+  // Determine if we're in edit mode based on initialValues
+  const isEditing = Boolean(initialValues && initialValues._id);
+  
   useEffect(() => {
+    console.log('ProductFormDialog opened with: ', { 
+      isEditing: Boolean(initialValues && initialValues._id),
+      initialValues 
+    });
+  
     if (initialValues) {
       console.log('Initial values:', initialValues);
       const updatedInitialValues = {
         ...initialValues,
-        price: typeof initialValues.price === 'number' ? initialValues.price * 1000000 : '',
-        // Xử lý danh mục
+        // Keep price in VND for display
+        price: typeof initialValues.price === 'number' 
+          ? (initialValues.price * 1000000).toString()
+          : '',
+        // Handle category
         category: initialValues.category?.name || 
                  (categories.find(c => c._id === initialValues.category)?.name) || 
                  initialValues.category || '',
-        // Xử lý thương hiệu
+        // Handle brand
         brand: initialValues.brand?.name || 
               (brands.find(b => b._id === initialValues.brand)?.name) || 
               initialValues.brand || '',
@@ -55,15 +75,18 @@ const ProductFormDialog = ({
       console.log('Updated form data:', updatedInitialValues);
       setFormData(updatedInitialValues);
 
-      // Xử lý ảnh sản phẩm
+      // Handle product images
       if (initialValues.images && Array.isArray(initialValues.images)) {
-        const previews = initialValues.images.map((img) => ({ 
-          url: typeof img === 'string' ? img : img.url || '', 
-          file: null 
-        }));
-        console.log('Image previews:', previews);
+        console.log('Product has images:', initialValues.images);
+        const previews = initialValues.images.map((img, index) => {
+          const imgUrl = typeof img === 'string' ? img : img.url || '';
+          console.log(`Processing image ${index + 1}:`, imgUrl);
+          return { url: imgUrl, file: null };
+        });
+        console.log('Image previews created:', previews);
         setImagePreviews(previews);
       } else {
+        console.log('No images found in product or images is not an array:', initialValues.images);
         setImagePreviews([]);
       }
     } else {
@@ -81,7 +104,18 @@ const ProductFormDialog = ({
   }, [initialValues, open, categories, brands]);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    // Clear error when field is modified
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
   };
 
   const handleFileChange = (e) => {
@@ -120,10 +154,10 @@ const ProductFormDialog = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Validate các trường bắt buộc
+    // Validate required fields
     if (!formData.name || !formData.description || !formData.price || !formData.stockQuantity || !formData.category) {
       setErrors({
-        name: !formData.name ? 'Tên Sản phẩm là bắt buộc' : '',
+        name: !formData.name ? 'Tên sản phẩm là bắt buộc' : '',
         description: !formData.description ? 'Mô tả sản phẩm là bắt buộc' : '',
         price: !formData.price ? 'Giá sản phẩm là bắt buộc' : '',
         stockQuantity: !formData.stockQuantity ? 'Số lượng tồn kho là bắt buộc' : '',
@@ -131,70 +165,78 @@ const ProductFormDialog = ({
       });
       return;
     }
-    
+
     try {
-      // Chuẩn bị dữ liệu để gửi
-      const clonedFormData = {...formData};
+      console.log('Starting form submission...');
       
-      // Chuyển đổi giá từ VND sang triệu VND nếu cần
-      if (clonedFormData.price && typeof clonedFormData.price !== 'undefined') {
-        const priceValue = typeof clonedFormData.price === 'string' 
-          ? parseFloat(clonedFormData.price.replace(/[^0-9.-]+/g, '')) 
-          : parseFloat(clonedFormData.price);
-          
-        if (!isNaN(priceValue)) {
-          // Nếu giá trị là hàng triệu VND (ví dụ: 21.950.000), chia cho 1.000.000
-          if (priceValue > 1000) {
-            clonedFormData.price = priceValue / 1000000;
-          } else {
-            // Nếu đã là triệu (ví dụ: 21.95) thì giữ nguyên
-            clonedFormData.price = priceValue;
-          }
+      // Prepare form data
+      const clonedFormData = {...formData};
+      console.log('Current image previews:', imagePreviews);
+      
+      // Convert price from VND to millions
+      if (clonedFormData.price) {
+        clonedFormData.price = convertVNDToMillions(clonedFormData.price);
+      }
+
+      // Handle images
+      const imageFiles = [];
+      clonedFormData.existingImages = [];
+      
+      console.log('Processing images for submission...');
+      
+      // Process image previews
+      for (const preview of imagePreviews) {
+        if (preview.file) {
+          imageFiles.push(preview.file);
+        } else if (preview.url) {
+          clonedFormData.existingImages.push(preview.url);
         }
       }
       
-      // Xử lý ảnh
-      const imageFiles = [];
+      // Create FormData if there are new images
+      const submitData = new FormData();
       
-      // Đảm bảo existingImages là một mảng
-      clonedFormData.existingImages = [];
-      
-      // Lọc các ảnh mới có file (chưa được tải lên trước đó)
-      imagePreviews.forEach(preview => {
-        // Kiểm tra đầy đủ điều kiện của preview
-        if (!preview || typeof preview !== 'object') return;
-        
-        // ƯU TIÊN: Nếu có preview.file, đó là file mới cần upload
-        if (preview.file) {
-          imageFiles.push(preview.file);
-        } else if (preview.url && (preview.url.startsWith('/uploads/') || preview.url.startsWith('http'))) {
-          // Chỉ khi không có preview.file, mới xét đến URL của ảnh đã tồn tại
-          clonedFormData.existingImages.push(preview.url);
+      // Append basic product data
+      Object.keys(clonedFormData).forEach(key => {
+        if (key !== 'images' && clonedFormData[key] !== undefined) {
+          submitData.append(key, clonedFormData[key]);
         }
       });
       
-      // Đảm bảo không có giá trị undefined hoặc null trong mảng
-      clonedFormData.existingImages = clonedFormData.existingImages.filter(url => url && typeof url === 'string');
+      // Append new images
+      imageFiles.forEach(file => {
+        submitData.append('images', file);
+      });
       
-      console.log('Submitting with data:', clonedFormData);
-      console.log('New image files:', imageFiles);
-      console.log('Existing images:', clonedFormData.existingImages || []);
+      // Append existing image URLs
+      if (clonedFormData.existingImages.length > 0) {
+        submitData.append('existingImages', JSON.stringify(clonedFormData.existingImages));
+      }
       
-      // Gọi hàm onSubmit (handleFormSubmit từ AdminProductManagement)
-      onSubmit(clonedFormData, imageFiles);
+      console.log('Submitting form data:', clonedFormData);
+      await onSubmit(clonedFormData, imageFiles);
+      onClose();
     } catch (error) {
-      console.error('Error in form submission:', error);
-      // Hiển thị lỗi nếu có
-      setErrors(prevErrors => ({
-        ...prevErrors,
-        form: 'Có lỗi xảy ra khi gửi form: ' + error.message
+      console.error('Error submitting form:', error);
+      setErrors(prev => ({
+        ...prev,
+        submit: error.message
       }));
     }
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth scroll="paper">
-      <DialogTitle>{isEditMode ? 'Chỉnh sửa Sản phẩm' : 'Chỉnh sửa Sản phẩm'}</DialogTitle>
+      <DialogTitle>
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Typography variant="h6">
+            {initialValues ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm mới'}
+          </Typography>
+          <IconButton onClick={onClose} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+      </DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent dividers>
           <Grid container spacing={3}>
@@ -219,6 +261,8 @@ const ProductFormDialog = ({
                 margin="dense"
                 multiline
                 rows={4}
+                error={Boolean(errors.description)}
+                helperText={errors.description}
               />
             </Grid>
 
@@ -232,9 +276,12 @@ const ProductFormDialog = ({
                 fullWidth
                 margin="dense"
                 required
-                InputProps={{ inputProps: { min: 0 } }}
+                InputProps={{ 
+                  inputProps: { min: 0 },
+                  endAdornment: <Typography variant="caption" sx={{ ml: 1 }}>VND</Typography>
+                }}
                 error={Boolean(errors.price)}
-                helperText={errors.price || 'Nhập giá sản phẩm (đơn vị: đồng, ví dụ: 23000000)'}
+                helperText={errors.price || 'Nhập giá sản phẩm (VND)'}
               />
               <TextField
                 name="stockQuantity"
@@ -300,6 +347,11 @@ const ProductFormDialog = ({
 
             <Grid item xs={12}>
               <Typography variant="subtitle1" gutterBottom sx={{ mt: 1 }}>Hình ảnh sản phẩm</Typography>
+              <Box sx={{ mb: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {isEditing ? 'Ảnh hiện tại của sản phẩm:' : 'Thêm ảnh cho sản phẩm:'}
+                </Typography>
+              </Box>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '10px', mb: 2 }}>
                 {imagePreviews.map((image, index) => (
                   <Box key={index} sx={{ position: 'relative', border: '1px dashed grey', padding: '5px', borderRadius: '4px' }}>
@@ -334,7 +386,7 @@ const ProductFormDialog = ({
                     startIcon={<AddPhotoAlternateIcon />} 
                     sx={{ height: 112, width: 112, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}
                   >
-                    Thêm ảnh
+                    {imagePreviews.length > 0 ? 'Thêm ảnh' : 'Chọn ảnh'}
                     <input type="file" hidden multiple accept="image/*" onChange={handleFileChange} />
                   </Button>
                 )}
@@ -344,8 +396,9 @@ const ProductFormDialog = ({
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={onClose}>Hủy bỏ</Button>
-          <Button type="submit" variant="contained" > 
-            {isEditMode ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
+          <Button type="submit" variant="contained" disabled={isSubmitting}> 
+            {initialValues && initialValues._id ? 'Lưu thay đổi' : 'Thêm sản phẩm'}
+            {isSubmitting && <CircularProgress size={24} sx={{ ml: 1 }} />}
           </Button>
         </DialogActions>
       </form>
