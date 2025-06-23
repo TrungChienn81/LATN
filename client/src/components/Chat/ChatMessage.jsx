@@ -11,7 +11,7 @@ import {
   Person as UserIcon
 } from '@mui/icons-material';
 
-const ChatMessage = ({ message, isBot = false, timestamp, contextProducts = [] }) => {
+const ChatMessage = ({ message, isBot = false, timestamp, contextProducts = [], costInfo = null }) => {
   const formatTime = (time) => {
     if (!time) return '';
     const date = new Date(time);
@@ -75,6 +75,18 @@ const ChatMessage = ({ message, isBot = false, timestamp, contextProducts = [] }
                   />
                 ))}
               </Box>
+            </Box>
+          )}
+          
+          {/* Show cost info if available */}
+          {isBot && costInfo && (
+            <Box sx={{ mt: 1 }}>
+              <Chip
+                label={`💰 Chi phí: $${costInfo.requestCost?.toFixed(6)} | Còn lại: $${costInfo.remainingBudget?.toFixed(4)}`}
+                size="small"
+                color={costInfo.remainingBudget > 3 ? 'success' : costInfo.remainingBudget > 1 ? 'warning' : 'error'}
+                sx={{ fontSize: '0.6rem' }}
+              />
             </Box>
           )}
         </Paper>

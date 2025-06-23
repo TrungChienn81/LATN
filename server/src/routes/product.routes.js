@@ -7,6 +7,7 @@ const upload = require('../middleware/upload.middleware'); // Thêm middleware u
 
 // Public routes - no authentication needed
 router.get('/', productController.getAllProducts);
+router.get('/rag-test/all', productController.getAllProductsForRAG); // RAG test route
 router.get('/:id', productController.getProductById);
 
 // Protected routes with role-based authorization

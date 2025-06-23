@@ -952,3 +952,26 @@ exports.importProducts = async (req, res, next) => {
     });
   }
 };
+
+// RAG Test - Get all products without pagination for testing
+exports.getAllProductsForRAG = async (req, res) => {
+  try {
+    const products = await Product.find()
+      .populate('category', 'name')
+      .populate('brand', 'name')
+      .populate('shopId', 'shopName')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      data: products
+    });
+  } catch (error) {
+    console.error('Error getting products for RAG:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi khi lấy dữ liệu sản phẩm: ' + error.message
+    });
+  }
+};

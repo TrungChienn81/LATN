@@ -80,8 +80,8 @@ mongoose.connect('mongodb+srv://TrungChienn:Chien2004@latn.af6hwio.mongodb.net/L
     app.use('/api/reviews', reviewRoutes); // Gắn review routes vào /api/reviews
     app.use('/api', userInteractionRoutes); // Gắn user interaction routes vào /api
     app.use('/api/ai', aiRoutes); // Gắn AI routes vào /api/ai
-    app.use('/api/chat', mockChatRoutes); // Gắn mock chat routes vào /api/chat (thay thế chatRoutes)
-    // app.use('/api/chat', chatRoutes); // Uncomment this and comment above line when you have OpenAI API key
+    // app.use('/api/chat', mockChatRoutes); // Mock AI - DISABLED 
+    app.use('/api/chat', chatRoutes); // Real OpenAI API - ENABLED 🚀
     
     // Khởi động server với cổng tự động tìm nếu cổng mặc định bị sử dụng
     (async () => {

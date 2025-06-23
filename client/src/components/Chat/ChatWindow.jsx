@@ -92,7 +92,8 @@ const ChatWindow = ({ open, onClose, minimized, onMinimize }) => {
           text: result.message,
           sender: 'bot',
           timestamp: new Date(),
-          contextProducts: result.contextProducts || []
+          contextProducts: result.contextProducts || [],
+          costInfo: result.costInfo || null
         };
         
         setMessages(prev => [...prev, botMessage]);
@@ -220,6 +221,7 @@ const ChatWindow = ({ open, onClose, minimized, onMinimize }) => {
                   isBot={message.sender === 'bot'}
                   timestamp={message.timestamp}
                   contextProducts={message.contextProducts}
+                  costInfo={message.costInfo}
                 />
               ))}
               

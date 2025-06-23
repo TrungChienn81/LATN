@@ -49,6 +49,7 @@ import ShopOverview from './components/Shop/ShopOverview';
 import AITestPage from './pages/AITestPage';
 import ChatTestPage from './pages/ChatTestPage';
 import ChatSetupPage from './pages/ChatSetupPage';
+import RAGTestPage from './pages/RAGTestPage';
 
 // Import Chat Provider
 import ChatProvider from './components/Chat/ChatProvider';
@@ -94,6 +95,9 @@ function App() {
             
             {/* Chat Test Page */}
             <Route path="/chat-test" element={<ChatTestPage />} />
+            
+            {/* RAG Test Page */}
+            <Route path="/rag-test" element={<RAGTestPage />} />
             
             {/* Chat Setup Page */}
             <Route path="/chat-setup" element={<ChatSetupPage />} />
