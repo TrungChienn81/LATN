@@ -18,7 +18,15 @@ import {
   DialogContent,
   DialogActions,
   IconButton,
-  Tooltip
+  Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Switch,
+  FormControlLabel,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -28,42 +36,85 @@ import {
   Phone as PhoneIcon,
   Email as EmailIcon,
   LocationOn as LocationIcon,
-  Description as DescriptionIcon
+  Description as DescriptionIcon,
+  PhotoCamera as PhotoCameraIcon,
+  Settings as SettingsIcon,
+  Security as SecurityIcon,
+  Notifications as NotificationsIcon
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
+
+// Tab Panel Component
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`settings-tabpanel-${index}`}
+      aria-labelledby={`settings-tab-${index}`}
+      {...other}
+    >
+      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+    </div>
+  );
+}
 
 const ShopSettings = () => {
   const [shop, setShop] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [editMode, setEditMode] = useState({
-    shopName: false,
-    description: false,
-    contactInfo: false,
-    address: false
-  });
+  const [tabValue, setTabValue] = useState(0);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   
-  const [formData, setFormData] = useState({
+  // Form states for different tabs
+  const [basicInfo, setBasicInfo] = useState({
     shopName: '',
     description: '',
     contactPhone: '',
     contactEmail: '',
-    address: {
-      street: '',
-      city: '',
-      district: '',
-      ward: ''
-    }
+    logoUrl: '',
+    bannerUrl: ''
   });
 
-  const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    field: '',
-    newValue: ''
+  const [addressInfo, setAddressInfo] = useState({
+    street: '',
+    city: '',
+    district: '',
+    ward: ''
   });
 
-  // Load shop data
+  const [businessSettings, setBusinessSettings] = useState({
+    autoConfirmOrders: false,
+    allowReturns: true,
+    returnPeriod: 7,
+    businessHours: {
+      open: '08:00',
+      close: '22:00',
+      closedDays: []
+    },
+    shippingMethods: ['standard', 'express'],
+    paymentMethods: ['cod', 'bank_transfer']
+  });
+
+  const [notificationSettings, setNotificationSettings] = useState({
+    emailOnNewOrder: true,
+    emailOnOrderStatusChange: true,
+    smsOnNewOrder: false,
+    smsOnOrderStatusChange: false
+  });
+
+  const dayOptions = [
+    { value: 0, label: 'Chủ nhật' },
+    { value: 1, label: 'Thứ 2' },
+    { value: 2, label: 'Thứ 3' },
+    { value: 3, label: 'Thứ 4' },
+    { value: 4, label: 'Thứ 5' },
+    { value: 5, label: 'Thứ 6' },
+    { value: 6, label: 'Thứ 7' }
+  ];
+
   useEffect(() => {
     fetchShopData();
   }, []);
@@ -75,504 +126,624 @@ const ShopSettings = () => {
       if (response.data.success) {
         const shopData = response.data.data;
         setShop(shopData);
-        setFormData({
+        
+        // Populate form states
+        setBasicInfo({
           shopName: shopData.shopName || '',
           description: shopData.description || '',
           contactPhone: shopData.contactPhone || '',
           contactEmail: shopData.contactEmail || '',
-          address: {
-            street: shopData.address?.street || '',
-            city: shopData.address?.city || '',
-            district: shopData.address?.district || '',
-            ward: shopData.address?.ward || ''
-          }
+          logoUrl: shopData.logoUrl || '',
+          bannerUrl: shopData.bannerUrl || ''
+        });
+
+        setAddressInfo({
+          street: shopData.address?.street || '',
+          city: shopData.address?.city || '',
+          district: shopData.address?.district || '',
+          ward: shopData.address?.ward || ''
+        });
+
+        // Load business settings from shop data or defaults
+        setBusinessSettings({
+          autoConfirmOrders: shopData.settings?.autoConfirmOrders || false,
+          allowReturns: shopData.settings?.allowReturns || true,
+          returnPeriod: shopData.settings?.returnPeriod || 7,
+          businessHours: shopData.settings?.businessHours || {
+            open: '08:00',
+            close: '22:00',
+            closedDays: []
+          },
+          shippingMethods: shopData.settings?.shippingMethods || ['standard', 'express'],
+          paymentMethods: shopData.settings?.paymentMethods || ['cod', 'bank_transfer']
+        });
+
+        setNotificationSettings({
+          emailOnNewOrder: shopData.settings?.emailOnNewOrder !== false,
+          emailOnOrderStatusChange: shopData.settings?.emailOnOrderStatusChange !== false,
+          smsOnNewOrder: shopData.settings?.smsOnNewOrder || false,
+          smsOnOrderStatusChange: shopData.settings?.smsOnOrderStatusChange || false
         });
       }
     } catch (error) {
-      console.error('Error fetching shop:', error);
+      console.error('Error fetching shop data:', error);
       toast.error('Không thể tải thông tin shop');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInputChange = (field, value) => {
-    if (field.includes('.')) {
-      const [parent, child] = field.split('.');
-      setFormData(prev => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent],
-          [child]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [field]: value
-      }));
-    }
+  const handleTabChange = (event, newValue) => {
+    setTabValue(newValue);
   };
 
-  const handleEditToggle = (field) => {
-    setEditMode(prev => ({
-      ...prev,
-      [field]: !prev[field]
-    }));
-  };
-
-  const handleSave = async (field) => {
-    if (field === 'shopName' && formData.shopName !== shop.shopName) {
-      // Confirm dialog for shop name change
-      setConfirmDialog({
-        open: true,
-        field: 'shopName',
-        newValue: formData.shopName
-      });
-      return;
-    }
-    
-    await saveField(field);
-  };
-
-  const saveField = async (field) => {
+  const handleBasicInfoSave = async () => {
     try {
       setSaving(true);
-      
-      let updateData = {};
-      
-      if (field === 'shopName') {
-        updateData.shopName = formData.shopName;
-      } else if (field === 'description') {
-        updateData.description = formData.description;
-      } else if (field === 'contactInfo') {
-        updateData.contactPhone = formData.contactPhone;
-        updateData.contactEmail = formData.contactEmail;
-      } else if (field === 'address') {
-        updateData.address = formData.address;
-      }
-
-      const response = await api.put(`/shops/${shop._id}`, updateData);
-      
+      const response = await api.put('/shops/my-shop', basicInfo);
       if (response.data.success) {
-        setShop(response.data.data);
-        toast.success('Cập nhật thành công!');
-        handleEditToggle(field);
+        toast.success('Cập nhật thông tin cơ bản thành công');
+        fetchShopData(); // Refresh data
       }
     } catch (error) {
-      console.error('Error updating shop:', error);
-      if (error.response?.data?.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error('Có lỗi xảy ra khi cập nhật');
-      }
+      console.error('Error updating basic info:', error);
+      toast.error('Có lỗi xảy ra khi cập nhật thông tin');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleConfirmSave = async () => {
-    setConfirmDialog({ open: false, field: '', newValue: '' });
-    await saveField('shopName');
+  const handleAddressSave = async () => {
+    try {
+      setSaving(true);
+      const response = await api.put('/shops/my-shop', {
+        address: addressInfo
+      });
+      if (response.data.success) {
+        toast.success('Cập nhật địa chỉ thành công');
+        fetchShopData(); // Refresh data
+      }
+    } catch (error) {
+      console.error('Error updating address:', error);
+      toast.error('Có lỗi xảy ra khi cập nhật địa chỉ');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleCancel = (field) => {
-    // Reset form data to original values
-    setFormData({
-      shopName: shop.shopName || '',
-      description: shop.description || '',
-      contactPhone: shop.contactPhone || '',
-      contactEmail: shop.contactEmail || '',
-      address: {
-        street: shop.address?.street || '',
-        city: shop.address?.city || '',
-        district: shop.address?.district || '',
-        ward: shop.address?.ward || ''
+  const handleBusinessSettingsSave = async () => {
+    try {
+      setSaving(true);
+      const response = await api.put('/shops/my-shop', {
+        settings: businessSettings
+      });
+      if (response.data.success) {
+        toast.success('Cập nhật cài đặt kinh doanh thành công');
+        fetchShopData(); // Refresh data
       }
-    });
-    handleEditToggle(field);
+    } catch (error) {
+      console.error('Error updating business settings:', error);
+      toast.error('Có lỗi xảy ra khi cập nhật cài đặt');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleNotificationSettingsSave = async () => {
+    try {
+      setSaving(true);
+      const response = await api.put('/shops/my-shop', {
+        settings: {
+          ...businessSettings,
+          ...notificationSettings
+        }
+      });
+      if (response.data.success) {
+        toast.success('Cập nhật cài đặt thông báo thành công');
+        fetchShopData(); // Refresh data
+      }
+    } catch (error) {
+      console.error('Error updating notification settings:', error);
+      toast.error('Có lỗi xảy ra khi cập nhật cài đặt thông báo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClosedDaysChange = (day) => {
+    setBusinessSettings(prev => ({
+      ...prev,
+      businessHours: {
+        ...prev.businessHours,
+        closedDays: prev.businessHours.closedDays.includes(day)
+          ? prev.businessHours.closedDays.filter(d => d !== day)
+          : [...prev.businessHours.closedDays, day]
+      }
+    }));
+  };
+
+  const handleShippingMethodChange = (method) => {
+    setBusinessSettings(prev => ({
+      ...prev,
+      shippingMethods: prev.shippingMethods.includes(method)
+        ? prev.shippingMethods.filter(m => m !== method)
+        : [...prev.shippingMethods, method]
+    }));
+  };
+
+  const handlePaymentMethodChange = (method) => {
+    setBusinessSettings(prev => ({
+      ...prev,
+      paymentMethods: prev.paymentMethods.includes(method)
+        ? prev.paymentMethods.filter(m => m !== method)
+        : [...prev.paymentMethods, method]
+    }));
   };
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
         <CircularProgress />
       </Box>
     );
   }
 
-  if (!shop) {
-    return (
-      <Alert severity="error" sx={{ m: 2 }}>
-        Không thể tải thông tin shop
-      </Alert>
-    );
-  }
-
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom sx={{ mb: 3, fontWeight: 'bold' }}>
+      <Typography variant="h5" fontWeight="bold" gutterBottom>
         Cài đặt Shop
       </Typography>
 
-      <Grid container spacing={3}>
-        {/* Shop Name Card */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <BusinessIcon sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="h6">Tên Shop</Typography>
-              </Box>
-              
-              {editMode.shopName ? (
-                <TextField
-                  fullWidth
-                  value={formData.shopName}
-                  onChange={(e) => handleInputChange('shopName', e.target.value)}
-                  variant="outlined"
-                  size="small"
-                  placeholder="Nhập tên shop mới"
-                  disabled={saving}
-                />
-              ) : (
-                <Typography variant="body1" sx={{ py: 1, minHeight: '24px' }}>
-                  {shop.shopName}
-                </Typography>
-              )}
-            </CardContent>
-            
-            <CardActions>
-              {editMode.shopName ? (
-                <>
-                  <Button
-                    startIcon={<SaveIcon />}
-                    onClick={() => handleSave('shopName')}
-                    disabled={saving || !formData.shopName.trim()}
-                    color="primary"
-                    size="small"
-                  >
-                    {saving ? <CircularProgress size={16} /> : 'Lưu'}
-                  </Button>
-                  <Button
-                    startIcon={<CancelIcon />}
-                    onClick={() => handleCancel('shopName')}
-                    disabled={saving}
-                    size="small"
-                  >
-                    Hủy
-                  </Button>
-                </>
-              ) : (
+      <Card>
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab icon={<BusinessIcon />} label="Thông tin cơ bản" />
+          <Tab icon={<SettingsIcon />} label="Cài đặt kinh doanh" />
+          <Tab icon={<NotificationsIcon />} label="Thông báo" />
+          <Tab icon={<SecurityIcon />} label="Bảo mật" />
+        </Tabs>
+
+        {/* Tab 1: Basic Information */}
+        <TabPanel value={tabValue} index={0}>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={4}>
+              <Box sx={{ textAlign: 'center', mb: 3 }}>
+                <Avatar
+                  src={basicInfo.logoUrl}
+                  sx={{ width: 120, height: 120, mx: 'auto', mb: 2 }}
+                >
+                  {basicInfo.shopName.charAt(0)}
+                </Avatar>
                 <Button
-                  startIcon={<EditIcon />}
-                  onClick={() => handleEditToggle('shopName')}
+                  variant="outlined"
+                  startIcon={<PhotoCameraIcon />}
                   size="small"
                 >
-                  Chỉnh sửa
+                  Thay đổi logo
                 </Button>
-              )}
-            </CardActions>
-          </Card>
-        </Grid>
-
-        {/* Description Card */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <DescriptionIcon sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="h6">Mô tả Shop</Typography>
               </Box>
-              
-              {editMode.description ? (
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  value={formData.description}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
-                  variant="outlined"
-                  size="small"
-                  placeholder="Nhập mô tả shop"
-                  disabled={saving}
-                />
-              ) : (
-                <Typography variant="body1" sx={{ py: 1, minHeight: '60px' }}>
-                  {shop.description || 'Chưa có mô tả'}
-                </Typography>
-              )}
-            </CardContent>
+            </Grid>
             
-            <CardActions>
-              {editMode.description ? (
-                <>
-                  <Button
-                    startIcon={<SaveIcon />}
-                    onClick={() => handleSave('description')}
-                    disabled={saving}
-                    color="primary"
-                    size="small"
-                  >
-                    {saving ? <CircularProgress size={16} /> : 'Lưu'}
-                  </Button>
-                  <Button
-                    startIcon={<CancelIcon />}
-                    onClick={() => handleCancel('description')}
-                    disabled={saving}
-                    size="small"
-                  >
-                    Hủy
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  startIcon={<EditIcon />}
-                  onClick={() => handleEditToggle('description')}
-                  size="small"
-                >
-                  Chỉnh sửa
-                </Button>
-              )}
-            </CardActions>
-          </Card>
-        </Grid>
-
-        {/* Contact Information Card */}
-        <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Thông tin liên hệ
-              </Typography>
-              
+            <Grid item xs={12} md={8}>
               <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <PhoneIcon sx={{ mr: 1, color: 'primary.main', fontSize: 20 }} />
-                    <Typography variant="subtitle2">Số điện thoại</Typography>
-                  </Box>
-                  
-                  {editMode.contactInfo ? (
-                    <TextField
-                      fullWidth
-                      value={formData.contactPhone}
-                      onChange={(e) => handleInputChange('contactPhone', e.target.value)}
-                      variant="outlined"
-                      size="small"
-                      placeholder="Nhập số điện thoại"
-                      disabled={saving}
-                    />
-                  ) : (
-                    <Typography variant="body1" sx={{ py: 1 }}>
-                      {shop.contactPhone || 'Chưa cập nhật'}
-                    </Typography>
-                  )}
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Tên shop"
+                    value={basicInfo.shopName}
+                    onChange={(e) => setBasicInfo(prev => ({ ...prev, shopName: e.target.value }))}
+                    required
+                  />
                 </Grid>
                 
-                <Grid item xs={12} md={6}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <EmailIcon sx={{ mr: 1, color: 'primary.main', fontSize: 20 }} />
-                    <Typography variant="subtitle2">Email liên hệ</Typography>
-                  </Box>
-                  
-                  {editMode.contactInfo ? (
-                    <TextField
-                      fullWidth
-                      value={formData.contactEmail}
-                      onChange={(e) => handleInputChange('contactEmail', e.target.value)}
-                      variant="outlined"
-                      size="small"
-                      placeholder="Nhập email liên hệ"
-                      disabled={saving}
-                      type="email"
-                    />
-                  ) : (
-                    <Typography variant="body1" sx={{ py: 1 }}>
-                      {shop.contactEmail || 'Chưa cập nhật'}
-                    </Typography>
-                  )}
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    label="Mô tả shop"
+                    value={basicInfo.description}
+                    onChange={(e) => setBasicInfo(prev => ({ ...prev, description: e.target.value }))}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Số điện thoại"
+                    value={basicInfo.contactPhone}
+                    onChange={(e) => setBasicInfo(prev => ({ ...prev, contactPhone: e.target.value }))}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Email liên hệ"
+                    type="email"
+                    value={basicInfo.contactEmail}
+                    onChange={(e) => setBasicInfo(prev => ({ ...prev, contactEmail: e.target.value }))}
+                  />
                 </Grid>
               </Grid>
-            </CardContent>
-            
-            <CardActions>
-              {editMode.contactInfo ? (
-                <>
-                  <Button
-                    startIcon={<SaveIcon />}
-                    onClick={() => handleSave('contactInfo')}
-                    disabled={saving}
-                    color="primary"
-                    size="small"
-                  >
-                    {saving ? <CircularProgress size={16} /> : 'Lưu'}
-                  </Button>
-                  <Button
-                    startIcon={<CancelIcon />}
-                    onClick={() => handleCancel('contactInfo')}
-                    disabled={saving}
-                    size="small"
-                  >
-                    Hủy
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  startIcon={<EditIcon />}
-                  onClick={() => handleEditToggle('contactInfo')}
-                  size="small"
-                >
-                  Chỉnh sửa
-                </Button>
-              )}
-            </CardActions>
-          </Card>
-        </Grid>
+            </Grid>
+          </Grid>
 
-        {/* Address Card */}
-        <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <LocationIcon sx={{ mr: 1, color: 'primary.main' }} />
-                <Typography variant="h6">Địa chỉ</Typography>
-              </Box>
-              
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>Đường/Số nhà</Typography>
-                  {editMode.address ? (
-                    <TextField
-                      fullWidth
-                      value={formData.address.street}
-                      onChange={(e) => handleInputChange('address.street', e.target.value)}
-                      variant="outlined"
-                      size="small"
-                      placeholder="Số nhà, tên đường"
-                      disabled={saving}
-                    />
-                  ) : (
-                    <Typography variant="body1" sx={{ py: 1 }}>
-                      {shop.address?.street || 'Chưa cập nhật'}
-                    </Typography>
-                  )}
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>Thành phố</Typography>
-                  {editMode.address ? (
-                    <TextField
-                      fullWidth
-                      value={formData.address.city}
-                      onChange={(e) => handleInputChange('address.city', e.target.value)}
-                      variant="outlined"
-                      size="small"
-                      placeholder="Thành phố"
-                      disabled={saving}
-                    />
-                  ) : (
-                    <Typography variant="body1" sx={{ py: 1 }}>
-                      {shop.address?.city || 'Chưa cập nhật'}
-                    </Typography>
-                  )}
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>Quận/Huyện</Typography>
-                  {editMode.address ? (
-                    <TextField
-                      fullWidth
-                      value={formData.address.district}
-                      onChange={(e) => handleInputChange('address.district', e.target.value)}
-                      variant="outlined"
-                      size="small"
-                      placeholder="Quận/Huyện"
-                      disabled={saving}
-                    />
-                  ) : (
-                    <Typography variant="body1" sx={{ py: 1 }}>
-                      {shop.address?.district || 'Chưa cập nhật'}
-                    </Typography>
-                  )}
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>Phường/Xã</Typography>
-                  {editMode.address ? (
-                    <TextField
-                      fullWidth
-                      value={formData.address.ward}
-                      onChange={(e) => handleInputChange('address.ward', e.target.value)}
-                      variant="outlined"
-                      size="small"
-                      placeholder="Phường/Xã"
-                      disabled={saving}
-                    />
-                  ) : (
-                    <Typography variant="body1" sx={{ py: 1 }}>
-                      {shop.address?.ward || 'Chưa cập nhật'}
-                    </Typography>
-                  )}
-                </Grid>
-              </Grid>
-            </CardContent>
+          <Divider sx={{ my: 3 }} />
+          
+          <Typography variant="h6" gutterBottom>Địa chỉ</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Địa chỉ cụ thể"
+                value={addressInfo.street}
+                onChange={(e) => setAddressInfo(prev => ({ ...prev, street: e.target.value }))}
+              />
+            </Grid>
             
-            <CardActions>
-              {editMode.address ? (
-                <>
-                  <Button
-                    startIcon={<SaveIcon />}
-                    onClick={() => handleSave('address')}
-                    disabled={saving}
-                    color="primary"
-                    size="small"
-                  >
-                    {saving ? <CircularProgress size={16} /> : 'Lưu'}
-                  </Button>
-                  <Button
-                    startIcon={<CancelIcon />}
-                    onClick={() => handleCancel('address')}
-                    disabled={saving}
-                    size="small"
-                  >
-                    Hủy
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  startIcon={<EditIcon />}
-                  onClick={() => handleEditToggle('address')}
-                  size="small"
-                >
-                  Chỉnh sửa
-                </Button>
-              )}
-            </CardActions>
-          </Card>
-        </Grid>
-      </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Tỉnh/Thành phố"
+                value={addressInfo.city}
+                onChange={(e) => setAddressInfo(prev => ({ ...prev, city: e.target.value }))}
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Quận/Huyện"
+                value={addressInfo.district}
+                onChange={(e) => setAddressInfo(prev => ({ ...prev, district: e.target.value }))}
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Phường/Xã"
+                value={addressInfo.ward}
+                onChange={(e) => setAddressInfo(prev => ({ ...prev, ward: e.target.value }))}
+              />
+            </Grid>
+          </Grid>
 
-      {/* Confirmation Dialog */}
-      <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({ open: false, field: '', newValue: '' })}>
-        <DialogTitle>Xác nhận thay đổi tên shop</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Bạn có chắc chắn muốn đổi tên shop từ "<strong>{shop.shopName}</strong>" thành "<strong>{confirmDialog.newValue}</strong>"?
-          </Typography>
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            Thay đổi tên shop có thể ảnh hưởng đến việc tìm kiếm và nhận diện thương hiệu của bạn.
+          <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+            <Button
+              variant="contained"
+              startIcon={<SaveIcon />}
+              onClick={handleBasicInfoSave}
+              disabled={saving}
+            >
+              {saving ? <CircularProgress size={20} /> : 'Lưu thông tin cơ bản'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handleAddressSave}
+              disabled={saving}
+            >
+              Lưu địa chỉ
+            </Button>
+          </Box>
+        </TabPanel>
+
+        {/* Tab 2: Business Settings */}
+        <TabPanel value={tabValue} index={1}>
+          <Grid container spacing={3}>
+            {/* Order Settings */}
+            <Grid item xs={12} md={6}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>Cài đặt đơn hàng</Typography>
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={businessSettings.autoConfirmOrders}
+                      onChange={(e) => setBusinessSettings(prev => ({ 
+                        ...prev, 
+                        autoConfirmOrders: e.target.checked 
+                      }))}
+                    />
+                  }
+                  label="Tự động xác nhận đơn hàng"
+                />
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={businessSettings.allowReturns}
+                      onChange={(e) => setBusinessSettings(prev => ({ 
+                        ...prev, 
+                        allowReturns: e.target.checked 
+                      }))}
+                    />
+                  }
+                  label="Cho phép đổi trả"
+                />
+                
+                {businessSettings.allowReturns && (
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Thời gian đổi trả (ngày)"
+                    value={businessSettings.returnPeriod}
+                    onChange={(e) => setBusinessSettings(prev => ({ 
+                      ...prev, 
+                      returnPeriod: parseInt(e.target.value) || 7 
+                    }))}
+                    sx={{ mt: 2 }}
+                  />
+                )}
+              </Paper>
+            </Grid>
+
+            {/* Business Hours */}
+            <Grid item xs={12} md={6}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>Giờ làm việc</Typography>
+                
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      type="time"
+                      label="Giờ mở cửa"
+                      value={businessSettings.businessHours.open}
+                      onChange={(e) => setBusinessSettings(prev => ({
+                        ...prev,
+                        businessHours: {
+                          ...prev.businessHours,
+                          open: e.target.value
+                        }
+                      }))}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      type="time"
+                      label="Giờ đóng cửa"
+                      value={businessSettings.businessHours.close}
+                      onChange={(e) => setBusinessSettings(prev => ({
+                        ...prev,
+                        businessHours: {
+                          ...prev.businessHours,
+                          close: e.target.value
+                        }
+                      }))}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                </Grid>
+
+                <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
+                  Ngày nghỉ:
+                </Typography>
+                {dayOptions.map(day => (
+                  <FormControlLabel
+                    key={day.value}
+                    control={
+                      <Switch
+                        checked={businessSettings.businessHours.closedDays.includes(day.value)}
+                        onChange={() => handleClosedDaysChange(day.value)}
+                        size="small"
+                      />
+                    }
+                    label={day.label}
+                    sx={{ display: 'block' }}
+                  />
+                ))}
+              </Paper>
+            </Grid>
+
+            {/* Shipping Methods */}
+            <Grid item xs={12} md={6}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>Phương thức giao hàng</Typography>
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={businessSettings.shippingMethods.includes('standard')}
+                      onChange={() => handleShippingMethodChange('standard')}
+                    />
+                  }
+                  label="Giao hàng tiêu chuẩn"
+                />
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={businessSettings.shippingMethods.includes('express')}
+                      onChange={() => handleShippingMethodChange('express')}
+                    />
+                  }
+                  label="Giao hàng nhanh"
+                />
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={businessSettings.shippingMethods.includes('pickup')}
+                      onChange={() => handleShippingMethodChange('pickup')}
+                    />
+                  }
+                  label="Khách tự đến lấy"
+                />
+              </Paper>
+            </Grid>
+
+            {/* Payment Methods */}
+            <Grid item xs={12} md={6}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>Phương thức thanh toán</Typography>
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={businessSettings.paymentMethods.includes('cod')}
+                      onChange={() => handlePaymentMethodChange('cod')}
+                    />
+                  }
+                  label="Thanh toán khi nhận hàng"
+                />
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={businessSettings.paymentMethods.includes('bank_transfer')}
+                      onChange={() => handlePaymentMethodChange('bank_transfer')}
+                    />
+                  }
+                  label="Chuyển khoản ngân hàng"
+                />
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={businessSettings.paymentMethods.includes('momo')}
+                      onChange={() => handlePaymentMethodChange('momo')}
+                    />
+                  }
+                  label="Ví MoMo"
+                />
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={businessSettings.paymentMethods.includes('vnpay')}
+                      onChange={() => handlePaymentMethodChange('vnpay')}
+                    />
+                  }
+                  label="VNPay"
+                />
+              </Paper>
+            </Grid>
+          </Grid>
+
+          <Box sx={{ mt: 3 }}>
+            <Button
+              variant="contained"
+              startIcon={<SaveIcon />}
+              onClick={handleBusinessSettingsSave}
+              disabled={saving}
+            >
+              {saving ? <CircularProgress size={20} /> : 'Lưu cài đặt kinh doanh'}
+            </Button>
+          </Box>
+        </TabPanel>
+
+        {/* Tab 3: Notification Settings */}
+        <TabPanel value={tabValue} index={2}>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>Thông báo Email</Typography>
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notificationSettings.emailOnNewOrder}
+                      onChange={(e) => setNotificationSettings(prev => ({ 
+                        ...prev, 
+                        emailOnNewOrder: e.target.checked 
+                      }))}
+                    />
+                  }
+                  label="Email khi có đơn hàng mới"
+                />
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notificationSettings.emailOnOrderStatusChange}
+                      onChange={(e) => setNotificationSettings(prev => ({ 
+                        ...prev, 
+                        emailOnOrderStatusChange: e.target.checked 
+                      }))}
+                    />
+                  }
+                  label="Email khi trạng thái đơn hàng thay đổi"
+                />
+              </Paper>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>Thông báo SMS</Typography>
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notificationSettings.smsOnNewOrder}
+                      onChange={(e) => setNotificationSettings(prev => ({ 
+                        ...prev, 
+                        smsOnNewOrder: e.target.checked 
+                      }))}
+                    />
+                  }
+                  label="SMS khi có đơn hàng mới"
+                />
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notificationSettings.smsOnOrderStatusChange}
+                      onChange={(e) => setNotificationSettings(prev => ({ 
+                        ...prev, 
+                        smsOnOrderStatusChange: e.target.checked 
+                      }))}
+                    />
+                  }
+                  label="SMS khi trạng thái đơn hàng thay đổi"
+                />
+              </Paper>
+            </Grid>
+          </Grid>
+
+          <Box sx={{ mt: 3 }}>
+            <Button
+              variant="contained"
+              startIcon={<SaveIcon />}
+              onClick={handleNotificationSettingsSave}
+              disabled={saving}
+            >
+              {saving ? <CircularProgress size={20} /> : 'Lưu cài đặt thông báo'}
+            </Button>
+          </Box>
+        </TabPanel>
+
+        {/* Tab 4: Security Settings */}
+        <TabPanel value={tabValue} index={3}>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            Các cài đặt bảo mật sẽ được phát triển trong phiên bản tiếp theo.
           </Alert>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDialog({ open: false, field: '', newValue: '' })}>
-            Hủy
-          </Button>
-          <Button onClick={handleConfirmSave} variant="contained" color="primary">
-            Xác nhận
-          </Button>
-        </DialogActions>
-      </Dialog>
+          
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>Bảo mật tài khoản</Typography>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Quản lý các cài đặt bảo mật cho shop của bạn
+            </Typography>
+            
+            <Button variant="outlined" disabled sx={{ mt: 2 }}>
+              Đổi mật khẩu
+            </Button>
+            
+            <Button variant="outlined" disabled sx={{ mt: 2, ml: 2 }}>
+              Thiết lập xác thực 2 lớp
+            </Button>
+          </Paper>
+        </TabPanel>
+      </Card>
     </Box>
   );
 };

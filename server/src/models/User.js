@@ -34,6 +34,11 @@ const userSchema = new Schema({
         enum: ['customer', 'seller', 'admin'],
         default: 'customer'
     },
+    name: {
+        type: String,
+        required: true,
+        trim: true
+    },
     firstName: {
         type: String,
         // required: true // Xem xét có bắt buộc không
@@ -50,6 +55,19 @@ const userSchema = new Schema({
         type: String,
         default: null
     },
+    address: {
+        type: String,
+        default: null
+    },
+    dateOfBirth: {
+        type: Date,
+        default: null
+    },
+    gender: {
+        type: String,
+        enum: ['male', 'female', 'other'],
+        default: null
+    },
     addresses: [addressSchema],
     status: {
         type: String,
@@ -61,6 +79,10 @@ const userSchema = new Schema({
         ref: 'Shop', // Tham chiếu đến model 'Shop' (sẽ tạo sau)
         default: null
     },
+    wishlist: [{
+        type: Schema.Types.ObjectId,
+        ref: 'Product'
+    }],
     userEmbedding: {
         type: [Number],
         default: undefined

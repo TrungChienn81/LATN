@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import { Box, CssBaseline, Container } from '@mui/material';
+import { Box, CssBaseline } from '@mui/material';
 import Navbar from './Navbar'; // Sử dụng cùng Navbar
 import Footer from './Footer'; // Sử dụng cùng Footer
 
@@ -9,10 +9,10 @@ const PublicLayout = () => {
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <CssBaseline />
       <Navbar />
-      {/* Có Container giới hạn chiều rộng ở đây */}
-      <Container component="main" maxWidth="lg" sx={{ mt: 4, mb: 4, flexGrow: 1 }}> 
+      {/* Remove Container wrapper để các trang có thể tự quản lý layout */}
+      <Box component="main" sx={{ flexGrow: 1, pt: 2 }}> 
         <Outlet /> {/* Nội dung các trang public sẽ render ở đây */}
-      </Container>
+      </Box>
       <Footer />
     </Box>
   );

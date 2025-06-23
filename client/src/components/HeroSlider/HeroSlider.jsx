@@ -71,7 +71,7 @@
 
 
     return (
-      <Box className="hero-slider-wrapper" sx={{ mb: 4, position: 'relative', overflow: 'hidden' }}>
+      <Box className="hero-slider-wrapper" sx={{ position: 'relative', overflow: 'hidden' }}>
         <Slider {...settings}>
           {slides.map((slide) => (
             <div key={slide.id}>

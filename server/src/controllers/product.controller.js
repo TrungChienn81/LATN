@@ -192,7 +192,7 @@ exports.getAllProducts = async (req, res, next) => {
     
     // Xây dựng query filter
     const queryObj = { ...req.query };
-    const excludedFields = ['page', 'sort', 'limit', 'fields'];
+    const excludedFields = ['page', 'sort', 'limit', 'fields', 'categoryName'];
     excludedFields.forEach(el => delete queryObj[el]);
     
     // Xử lý filter đặc biệt cho shopId
@@ -216,13 +216,38 @@ exports.getAllProducts = async (req, res, next) => {
     let queryStr = JSON.stringify(queryObj);
     queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, match => `$${match}`);
     
-    // Tạo query
+    // Tạo query cơ bản
     let query = Product.find(JSON.parse(queryStr))
       .skip(skip)
       .limit(limit)
-      .populate('category', 'name')
-      .populate('brand', 'name')
+      .populate('category', 'name slug')
+      .populate('brand', 'name slug')
       .populate('shopId', 'shopName ownerId status rating');
+    
+    // Xử lý filter theo tên category (cho gaming hoặc category khác)
+    if (req.query.categoryName) {
+      const categoryName = req.query.categoryName.toLowerCase();
+      
+      // Tìm tất cả category có tên chứa từ khóa
+      const categories = await Category.find({
+        name: { $regex: categoryName, $options: 'i' }
+      });
+      
+      if (categories.length > 0) {
+        const categoryIds = categories.map(cat => cat._id);
+        query = query.where('category').in(categoryIds);
+      } else {
+        // Nếu không tìm thấy category nào, trả về empty
+        return res.status(200).json({
+          success: true,
+          count: 0,
+          total: 0,
+          totalPages: 0,
+          currentPage: page,
+          data: []
+        });
+      }
+    }
     
     // Sắp xếp
     if (req.query.sort) {
@@ -239,10 +264,67 @@ exports.getAllProducts = async (req, res, next) => {
     const formattedProducts = products.map(product => {
       const productObj = product.toObject();
       productObj.shop = productObj.shopId; // Copy shopId data to shop field
+      
+      // Add brandName for easier frontend access
+      if (productObj.brand && typeof productObj.brand === 'object' && productObj.brand.name) {
+        productObj.brandName = productObj.brand.name;
+      } else if (typeof productObj.brand === 'string') {
+        // If brand is just an ObjectId string, try to extract from product name
+        if (productObj.name) {
+          const nameParts = productObj.name.split(' ');
+          // Look for known brands in the product name
+          for (const part of nameParts) {
+            const partLower = part.toLowerCase();
+            if (['msi', 'acer', 'asus', 'dell', 'hp', 'lenovo', 'apple', 'samsung', 'lg', 'sony', 
+                 'intel', 'amd', 'nvidia', 'corsair', 'kingston', 'crucial', 'western', 'seagate',
+                 'logitech', 'razer', 'steelseries', 'hyperx', 'cooler', 'master', 'thermaltake',
+                 'gigabyte', 'asrock', 'evga', 'zotac', 'viewsonic', 'benq', 'philips'].includes(partLower)) {
+              productObj.brandName = part.toUpperCase();
+              break;
+            }
+          }
+          
+          // If still no brandName found, try position-based extraction
+          if (!productObj.brandName && nameParts.length >= 3) {
+            const possibleBrand = nameParts[2];
+            if (possibleBrand && 
+                !['gaming', 'laptop', 'pc', 'màn', 'hình', 'chuột', 'bàn', 'phím', 'máy', 'tính'].includes(possibleBrand.toLowerCase()) &&
+                possibleBrand.length >= 2) {
+              productObj.brandName = possibleBrand.charAt(0).toUpperCase() + possibleBrand.slice(1);
+            }
+          }
+        }
+        
+        // Fallback if still no brandName
+        if (!productObj.brandName) {
+          productObj.brandName = 'Đa thương hiệu';
+        }
+      }
+      
+      // Add categoryName for easier frontend access  
+      if (productObj.category && typeof productObj.category === 'object' && productObj.category.name) {
+        productObj.categoryName = productObj.category.name;
+      } else if (typeof productObj.category === 'string') {
+        // Try to extract category name from known patterns
+        productObj.categoryName = 'Gaming'; // Default for now since we're in gaming context
+      }
+      
       return productObj;
     });
     
-    const total = await Product.countDocuments(JSON.parse(queryStr));
+    // Tính total với cùng filter
+    let countQuery = Product.find(JSON.parse(queryStr));
+    if (req.query.categoryName) {
+      const categoryName = req.query.categoryName.toLowerCase();
+      const categories = await Category.find({
+        name: { $regex: categoryName, $options: 'i' }
+      });
+      if (categories.length > 0) {
+        const categoryIds = categories.map(cat => cat._id);
+        countQuery = countQuery.where('category').in(categoryIds);
+      }
+    }
+    const total = await countQuery.countDocuments();
     
     res.status(200).json({
       success: true,
@@ -279,6 +361,50 @@ exports.getProductById = async (req, res, next) => {
     // Format product để có trường shop
     const productObj = product.toObject();
     productObj.shop = productObj.shopId;
+    
+    // Add brandName for easier frontend access
+    if (productObj.brand && typeof productObj.brand === 'object' && productObj.brand.name) {
+      productObj.brandName = productObj.brand.name;
+    } else if (typeof productObj.brand === 'string') {
+      // If brand is just an ObjectId string, try to extract from product name
+      if (productObj.name) {
+        const nameParts = productObj.name.split(' ');
+        // Look for known brands in the product name
+        for (const part of nameParts) {
+          const partLower = part.toLowerCase();
+          if (['msi', 'acer', 'asus', 'dell', 'hp', 'lenovo', 'apple', 'samsung', 'lg', 'sony', 
+               'intel', 'amd', 'nvidia', 'corsair', 'kingston', 'crucial', 'western', 'seagate',
+               'logitech', 'razer', 'steelseries', 'hyperx', 'cooler', 'master', 'thermaltake',
+               'gigabyte', 'asrock', 'evga', 'zotac', 'viewsonic', 'benq', 'philips'].includes(partLower)) {
+            productObj.brandName = part.toUpperCase();
+            break;
+          }
+        }
+        
+        // If still no brandName found, try position-based extraction
+        if (!productObj.brandName && nameParts.length >= 3) {
+          const possibleBrand = nameParts[2];
+          if (possibleBrand && 
+              !['gaming', 'laptop', 'pc', 'màn', 'hình', 'chuột', 'bàn', 'phím', 'máy', 'tính'].includes(possibleBrand.toLowerCase()) &&
+              possibleBrand.length >= 2) {
+            productObj.brandName = possibleBrand.charAt(0).toUpperCase() + possibleBrand.slice(1);
+          }
+        }
+      }
+      
+      // Fallback if still no brandName
+      if (!productObj.brandName) {
+        productObj.brandName = 'Đa thương hiệu';
+      }
+    }
+    
+    // Add categoryName for easier frontend access  
+    if (productObj.category && typeof productObj.category === 'object' && productObj.category.name) {
+      productObj.categoryName = productObj.category.name;
+    } else if (typeof productObj.category === 'string') {
+      // Try to extract category name from known patterns
+      productObj.categoryName = 'Gaming'; // Default for now since we're in gaming context
+    }
     
     res.status(200).json({
       success: true,
@@ -395,15 +521,29 @@ exports.updateProduct = async (req, res, next) => {
     }
 
     if (updateData.brand && typeof updateData.brand === 'string') {
+      // Tìm brand theo tên
       const brand = await Brand.findOne({ name: updateData.brand });
-      if (brand) updateData.brand = brand._id;
-      else delete updateData.brand; // Hoặc xử lý lỗi nếu brand không tìm thấy
+      if (brand) {
+        // Nếu tìm thấy brand trong database, sử dụng ID
+        updateData.brand = brand._id;
+      } else {
+        // Nếu không tìm thấy brand, giữ nguyên tên (để lưu trực tiếp tên vào database)
+        console.log(`Brand "${updateData.brand}" not found in database, keeping name as brand value`);
+        // updateData.brand giữ nguyên giá trị string
+      }
     }
 
     if (updateData.category && typeof updateData.category === 'string') {
+      // Tìm category theo tên
       const category = await Category.findOne({ name: updateData.category });
-      if (category) updateData.category = category._id;
-      else delete updateData.category; // Hoặc xử lý lỗi
+      if (category) {
+        // Nếu tìm thấy category trong database, sử dụng ID
+        updateData.category = category._id;
+      } else {
+        // Nếu không tìm thấy category, giữ nguyên tên (để lưu trực tiếp tên vào database)
+        console.log(`Category "${updateData.category}" not found in database, keeping name as category value`);
+        // updateData.category giữ nguyên giá trị string
+      }
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(productId, updateData, { new: true, runValidators: true });

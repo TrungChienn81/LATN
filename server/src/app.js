@@ -30,7 +30,7 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bo
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Kết nối MongoDB với các tùy chọn được hỗ trợ trong phiên bản mới
-mongoose.connect(process.env.MONGODB_URI, {
+mongoose.connect('mongodb+srv://TrungChienn:Chien2004@latn.af6hwio.mongodb.net/LATNShop08?retryWrites=true&w=majority&appName=LATN', {
     // Tùy chọn cho Driver
     connectTimeoutMS: 30000,         // Tăng thời gian timeout kết nối lên 30 giây
     socketTimeoutMS: 45000,          // Tăng thời gian chờ socket lên 45 giây
@@ -62,6 +62,11 @@ mongoose.connect(process.env.MONGODB_URI, {
     const userRoutes = require('./routes/user.routes'); // <<< Import user routes
     const categoryRoutes = require('./routes/category.routes');
     const brandRoutes = require('./routes/brand.routes');
+    const reviewRoutes = require('./routes/review.routes'); // Import review routes
+    const userInteractionRoutes = require('./routes/userInteraction.routes'); // Import user interaction routes
+    const aiRoutes = require('./routes/ai.routes'); // Import AI routes
+    const chatRoutes = require('./routes/chat.routes'); // Import chat routes
+    const mockChatRoutes = require('./routes/mockChat.routes'); // Import mock chat routes
 
 
     app.use('/api/auth', authRoutes); // Gắn auth routes vào đường dẫn /api/auth
@@ -72,6 +77,11 @@ mongoose.connect(process.env.MONGODB_URI, {
     app.use('/api/users', userRoutes); // <<< Gắn user routes vào đường dẫn /api/users
     app.use('/api/categories', categoryRoutes);
     app.use('/api/brands', brandRoutes);
+    app.use('/api/reviews', reviewRoutes); // Gắn review routes vào /api/reviews
+    app.use('/api', userInteractionRoutes); // Gắn user interaction routes vào /api
+    app.use('/api/ai', aiRoutes); // Gắn AI routes vào /api/ai
+    app.use('/api/chat', mockChatRoutes); // Gắn mock chat routes vào /api/chat (thay thế chatRoutes)
+    // app.use('/api/chat', chatRoutes); // Uncomment this and comment above line when you have OpenAI API key
     
     // Khởi động server với cổng tự động tìm nếu cổng mặc định bị sử dụng
     (async () => {

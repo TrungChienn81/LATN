@@ -89,6 +89,12 @@ export const AuthProvider = ({ children }) => {
      }
    };
 
+   // Hàm cập nhật thông tin user
+   const updateUser = (updatedUser) => {
+     setUser(updatedUser);
+     localStorage.setItem('user', JSON.stringify(updatedUser));
+   };
+
 
   // Giá trị cung cấp bởi Context
   const value = {
@@ -99,6 +105,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    updateUser, // Hàm cập nhật user profile
     setUser, // Có thể cần để cập nhật user từ nơi khác (ví dụ: profile update)
     setToken,
     setIsAuthenticated

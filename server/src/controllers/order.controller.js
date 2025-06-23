@@ -7,10 +7,7 @@ const Shop = require('../models/Shop');
 const mongoose = require('mongoose');
 const catchAsync = require('../utils/catchAsync');
 
-// Helper function to generate a simple order code (bạn có thể làm phức tạp hơn)
-const generateOrderCode = () => {
-    return `HD${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 100)}`;
-}
+// Removed unused generateOrderCode function - using orderNumber from model instead
 
 // @desc    Tạo đơn hàng mới từ giỏ hàng
 // @route   POST /api/orders
@@ -294,4 +291,251 @@ exports.updateOrderStatus = catchAsync(async (req, res) => {
         message: 'Đã cập nhật trạng thái đơn hàng',
         data: order
     });
+});
+
+// @desc    Xử lý thanh toán đơn hàng
+// @route   POST /api/orders/:orderId/payment
+// @access  Private (Customer)
+exports.processPayment = catchAsync(async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const orderId = req.params.orderId;
+        const { paymentMethod } = req.body;
+
+        // Validate payment method
+        const validMethods = ['momo', 'vnpay', 'bank_transfer', 'zalopay'];
+        if (!validMethods.includes(paymentMethod)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Phương thức thanh toán không hợp lệ'
+            });
+        }
+
+        // Find order and verify ownership
+        const order = await Order.findOne({
+            _id: orderId,
+            customer: userId
+        });
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy đơn hàng'
+            });
+        }
+
+        // Check if order can be paid
+        if (order.paymentStatus === 'paid') {
+            return res.status(400).json({
+                success: false,
+                message: 'Đơn hàng đã được thanh toán'
+            });
+        }
+
+        if (order.orderStatus === 'cancelled') {
+            return res.status(400).json({
+                success: false,
+                message: 'Không thể thanh toán đơn hàng đã bị hủy'
+            });
+        }
+
+        let paymentResult = {};
+
+        switch (paymentMethod) {
+            case 'momo':
+                paymentResult = await processMoMoPayment(order);
+                break;
+            case 'vnpay':
+                paymentResult = await processVNPayPayment(order);
+                break;
+            case 'bank_transfer':
+                paymentResult = await processBankTransferPayment(order);
+                break;
+            case 'zalopay':
+                paymentResult = await processZaloPayPayment(order);
+                break;
+            default:
+                return res.status(400).json({
+                    success: false,
+                    message: 'Phương thức thanh toán chưa được hỗ trợ'
+                });
+        }
+
+        // Update order payment method
+        order.paymentMethod = paymentMethod;
+        await order.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Khởi tạo thanh toán thành công',
+            data: paymentResult
+        });
+
+    } catch (error) {
+        console.error('Error processing payment:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi server khi xử lý thanh toán: ' + error.message
+        });
+    }
+});
+
+// Helper functions for payment processing
+const processMoMoPayment = async (order) => {
+    // TODO: Implement real MoMo API integration
+    // For now, return mock payment URL
+    const paymentUrl = `https://test-payment.momo.vn/v2/gateway/api/create?orderId=${order.orderNumber}&amount=${order.totalAmount * 1000000}&orderInfo=Thanh toán đơn hàng ${order.orderNumber}`;
+    
+    return {
+        paymentUrl,
+        paymentMethod: 'momo',
+        orderId: order._id,
+        amount: order.totalAmount * 1000000
+    };
+};
+
+const processVNPayPayment = async (order) => {
+    // TODO: Implement real VNPay API integration
+    // For now, return mock payment URL
+    const paymentUrl = `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?orderId=${order.orderNumber}&amount=${order.totalAmount * 100}&orderInfo=Thanh toán đơn hàng ${order.orderNumber}`;
+    
+    return {
+        paymentUrl,
+        paymentMethod: 'vnpay',
+        orderId: order._id,
+        amount: order.totalAmount * 1000000
+    };
+};
+
+const processBankTransferPayment = async (order) => {
+    // For bank transfer, just provide banking details
+    return {
+        paymentMethod: 'bank_transfer',
+        orderId: order._id,
+        amount: order.totalAmount * 1000000,
+        bankingDetails: {
+            bankName: 'Ngân hàng TMCP Đầu tư và Phát triển Việt Nam (BIDV)',
+            accountNumber: '1234567890',
+            accountName: 'CONG TY TNHH LATN SHOP',
+            transferContent: `Thanh toan don hang ${order.orderNumber}`,
+            note: 'Vui lòng chuyển khoản đúng nội dung để được xử lý nhanh chóng'
+        }
+    };
+};
+
+const processZaloPayPayment = async (order) => {
+    // TODO: Implement real ZaloPay API integration
+    const paymentUrl = `https://sb-openapi.zalopay.vn/v2/create?orderId=${order.orderNumber}&amount=${order.totalAmount * 1000000}`;
+    
+    return {
+        paymentUrl,
+        paymentMethod: 'zalopay',
+        orderId: order._id,
+        amount: order.totalAmount * 1000000
+    };
+};
+
+// @desc    Xử lý callback từ payment gateway
+// @route   POST /api/orders/payment/callback/:method
+// @access  Public (Payment Gateway)
+exports.handlePaymentCallback = catchAsync(async (req, res) => {
+    try {
+        const { method } = req.params;
+        const callbackData = req.body;
+
+        console.log(`Payment callback received for ${method}:`, callbackData);
+
+        let orderId;
+        let paymentStatus = 'failed';
+
+        switch (method) {
+            case 'momo':
+                orderId = callbackData.orderId;
+                paymentStatus = callbackData.resultCode === 0 ? 'paid' : 'failed';
+                break;
+            case 'vnpay':
+                orderId = callbackData.vnp_TxnRef;
+                paymentStatus = callbackData.vnp_ResponseCode === '00' ? 'paid' : 'failed';
+                break;
+            case 'zalopay':
+                orderId = callbackData.app_trans_id;
+                paymentStatus = callbackData.return_code === 1 ? 'paid' : 'failed';
+                break;
+            default:
+                return res.status(400).json({
+                    success: false,
+                    message: 'Unsupported payment method'
+                });
+        }
+
+        // Find order by orderNumber
+        const order = await Order.findOne({ orderNumber: orderId });
+        
+        if (order) {
+            order.paymentStatus = paymentStatus;
+            if (paymentStatus === 'paid') {
+                order.orderStatus = 'confirmed'; // Auto confirm when paid
+            }
+            await order.save();
+
+            console.log(`Order ${orderId} payment status updated to ${paymentStatus}`);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Payment callback processed'
+        });
+
+    } catch (error) {
+        console.error('Error handling payment callback:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error processing payment callback'
+        });
+    }
+});
+
+// @desc    Xác nhận thanh toán chuyển khoản
+// @route   PUT /api/orders/:orderId/confirm-payment
+// @access  Private (Admin)
+exports.confirmBankTransferPayment = catchAsync(async (req, res) => {
+    try {
+        const orderId = req.params.orderId;
+        const { transactionCode, note } = req.body;
+
+        const order = await Order.findById(orderId);
+        
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy đơn hàng'
+            });
+        }
+
+        if (order.paymentMethod !== 'bank_transfer') {
+            return res.status(400).json({
+                success: false,
+                message: 'Đơn hàng không phải thanh toán chuyển khoản'
+            });
+        }
+
+        order.paymentStatus = 'paid';
+        order.orderStatus = 'confirmed';
+        order.notes = (order.notes || '') + `\nXác nhận chuyển khoản - Mã GD: ${transactionCode}. ${note || ''}`;
+        
+        await order.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Đã xác nhận thanh toán chuyển khoản',
+            data: order
+        });
+
+    } catch (error) {
+        console.error('Error confirming bank transfer:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi server khi xác nhận thanh toán'
+        });
+    }
 });

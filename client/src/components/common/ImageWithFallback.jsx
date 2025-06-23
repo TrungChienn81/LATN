@@ -54,7 +54,7 @@ const ImageWithFallback = (props) => {
       }
       // Handle local server uploads (/uploads/...)
       else if (src.startsWith('/uploads/')) {
-        const apiBaseUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
+        const apiBaseUrl = `${window.location.protocol}//${window.location.hostname}:3001`;
         imageSrc = `${apiBaseUrl}${src}`;
       }
       // Handle URLs that might be missing the protocol
@@ -66,7 +66,7 @@ const ImageWithFallback = (props) => {
       }
       // Handle other relative paths
       else if (!src.match(/^[a-z]+:/i)) {
-        const apiBaseUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
+        const apiBaseUrl = `${window.location.protocol}//${window.location.hostname}:3001`;
         imageSrc = src.startsWith('/') ? `${apiBaseUrl}${src}` : `${apiBaseUrl}/${src}`;
       }
     } catch (error) {

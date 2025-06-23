@@ -101,7 +101,22 @@ const ProductFormDialog = ({
       setImagePreviews([]);
     }
     setErrors({}); 
-  }, [initialValues, open, categories, brands]);
+  }, [initialValues, open]);
+
+  // Separate useEffect to update category/brand names khi categories/brands change
+  useEffect(() => {
+    if (initialValues && initialValues._id && categories.length > 0 && brands.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        category: initialValues.category?.name || 
+                 (categories.find(c => c._id === initialValues.category)?.name) || 
+                 initialValues.category || prev.category,
+        brand: initialValues.brand?.name || 
+              (brands.find(b => b._id === initialValues.brand)?.name) || 
+              initialValues.brand || prev.brand,
+      }));
+    }
+  }, [categories, brands, initialValues?._id]); // Chỉ update khi categories/brands thay đổi
 
   const handleChange = (e) => {
     const { name, value } = e.target;

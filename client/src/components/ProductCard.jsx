@@ -30,7 +30,7 @@ function ProductCard({ product }) {
         imageUrl = imagePath;
       } else if (imagePath.startsWith('/uploads/')) {
         // Đường dẫn upload từ server - cần thêm domain của server API
-        const serverUrl = 'http://localhost:5000';
+        const serverUrl = 'http://localhost:3001';
         imageUrl = `${serverUrl}${imagePath}`;
       } else {
         // Xây dựng URL với origin của server
@@ -48,7 +48,7 @@ function ProductCard({ product }) {
         imageUrl = imagePath;
       } else if (imagePath.startsWith('/uploads/')) {
         // Đường dẫn upload từ server - cần thêm domain của server API
-        const serverUrl = 'http://localhost:5000';
+        const serverUrl = 'http://localhost:3001';
         imageUrl = `${serverUrl}${imagePath}`;
       } else {
         imageUrl = `${window.location.origin}${imagePath.startsWith('/') ? imagePath : `/${imagePath}`}`;

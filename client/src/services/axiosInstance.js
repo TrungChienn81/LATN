@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const instance = axios.create({
-  baseURL: 'http://localhost:5000/api', // Sửa lại nếu backend port khác
+  baseURL: 'http://localhost:3001/api', // Sửa lại nếu backend port khác
 });
 
 instance.interceptors.request.use(

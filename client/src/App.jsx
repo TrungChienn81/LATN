@@ -17,6 +17,7 @@ import AdminLayout from './components/Layout/AdminLayout';   // <<< Import Admin
 // Import Pages
 import HomePage from './pages/HomePage';
 import ProductsPage from './pages/ProductsPage';
+import ProductCategoryPage from './pages/ProductCategoryPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
@@ -29,23 +30,35 @@ import BrandManagement from './components/Admin/BrandManagement';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import OrdersPage from './pages/OrdersPage';
+import UserProfilePage from './pages/UserProfilePage';
 
 // Import Shop Pages
 import CreateShopPage from './pages/CreateShopPage';
 import ShopDashboardPage from './pages/ShopDashboardPage';
 import EditShopPage from './pages/EditShopPage';
 import ShopPage from './pages/ShopPage';
+import ShopDetailPage from './pages/ShopDetailPage';
 
 // Import Shop Components
 import ShopProductManagement from './components/Shop/ShopProductManagement';
+import ShopOrderManagement from './components/Shop/ShopOrderManagement';
 import ShopSettings from './components/Shop/ShopSettings';
 import ShopOverview from './components/Shop/ShopOverview';
+
+// Import AI Test Page
+import AITestPage from './pages/AITestPage';
+import ChatTestPage from './pages/ChatTestPage';
+import ChatSetupPage from './pages/ChatSetupPage';
+
+// Import Chat Provider
+import ChatProvider from './components/Chat/ChatProvider';
 
 function App() {
   return (
     <AuthProvider>
       <CartProvider>
-        <CssBaseline /> {/* CssBaseline có thể để ở đây hoặc trong từng Layout */}
+        <ChatProvider>
+          <CssBaseline /> {/* CssBaseline có thể để ở đây hoặc trong từng Layout */}
         <ToastContainer
           position="top-right"
           autoClose={3000}
@@ -62,23 +75,34 @@ function App() {
           <Route element={<PublicLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/products" element={<ProductsPage />} />
+            <Route path="/categories/:categorySlug" element={<ProductCategoryPage />} />
             <Route path="/product/:id" element={<ProductDetailPage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/profile" element={<UserProfilePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             
             {/* Shop Routes */}
             <Route path="/create-shop" element={<CreateShopPage />} />
             <Route path="/shop-edit/:id" element={<EditShopPage />} />
-            <Route path="/shop/:id" element={<ShopPage />} />
+            <Route path="/shop/:shopId" element={<ShopDetailPage />} />
+            
+            {/* AI Test Page */}
+            <Route path="/ai-test" element={<AITestPage />} />
+            
+            {/* Chat Test Page */}
+            <Route path="/chat-test" element={<ChatTestPage />} />
+            
+            {/* Chat Setup Page */}
+            <Route path="/chat-setup" element={<ChatSetupPage />} />
             
             {/* Shop Dashboard Routes */}
             <Route path="/my-shop/*" element={<ShopDashboardPage />}>
               <Route path="overview" element={<ShopOverview />} />
               <Route path="products" element={<ShopProductManagement />} />
-              <Route path="orders" element={<div>Shop Orders Content</div>} />
+              <Route path="orders" element={<ShopOrderManagement />} />
               <Route path="customers" element={<div>Shop Customers Content</div>} />
               <Route path="analytics" element={<div>Shop Analytics Content</div>} />
               <Route path="settings" element={<ShopSettings />} />
@@ -110,6 +134,7 @@ function App() {
           {/* TODO: Thêm trang 404 Not Found */}
           {/* <Route path="*" element={<NotFoundPage />} /> */}
         </Routes>
+        </ChatProvider>
       </CartProvider>
     </AuthProvider>
   );

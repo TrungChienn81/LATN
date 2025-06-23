@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Typography,
   Box,
@@ -116,46 +116,147 @@ const AdminProductManagement = () => {
   const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
 
+  // Thêm ref để theo dõi việc fetch
+  const isFetchingRef = useRef(false);
+
   // Hàm fetch sản phẩm với phân trang
   const fetchProducts = async () => {
+    // Prevent duplicate calls
+    if (isFetchingRef.current) {
+      console.log('Fetch already in progress, skipping...');
+      return;
+    }
+    
     try {
+      isFetchingRef.current = true;
       setLoading(true);
       const { page, limit } = pagination;
+      console.log(`Fetching products: page=${page}, limit=${limit}`);
       const response = await api.get(`/products?page=${page}&limit=${limit}`);
       if (response.data && response.data.success) {
         // Cập nhật thông tin phân trang
-        setPagination(prev => ({
-          ...prev,
+        const newPagination = {
+          ...pagination,
           total: response.data.total,
           totalPages: response.data.totalPages,
           page: response.data.currentPage
-        }));
+        };
+        console.log('Updating pagination with server response:', newPagination);
+        setPagination(newPagination);
         
         // Map các danh mục và thương hiệu từ ID sang tên để hiển thị
         const productsWithNames = response.data.data.map(product => {
           try {
-            // Tìm danh mục dựa trên ID
-            const category = categories.find(cat => cat._id === product.category);
-            // Tìm thương hiệu dựa trên ID
-            const brand = brands.find(b => b._id === product.brand);
+            // Xử lý category name
+            let categoryName = 'Không xác định';
+            
+            if (product.category) {
+              if (typeof product.category === 'object' && product.category.name) {
+                // Category đã được populate từ server
+                categoryName = product.category.name;
+              } else if (typeof product.category === 'string') {
+                // Category là ID string hoặc tên, cần tìm tên
+                const category = categories.find(cat => cat._id === product.category);
+                if (category && category.name) {
+                  // Tìm thấy category theo ID
+                  categoryName = category.name;
+                } else {
+                  // Không tìm thấy theo ID, có thể category đã là tên
+                  // Kiểm tra xem có category nào có tên giống không
+                  const categoryByName = categories.find(cat => 
+                    cat.name && cat.name.toLowerCase() === product.category.toLowerCase()
+                  );
+                  if (categoryByName) {
+                    categoryName = categoryByName.name;
+                  } else {
+                    // Không tìm thấy trong danh sách, sử dụng giá trị gốc làm tên
+                    categoryName = product.category;
+                    console.log(`Category "${product.category}" not found in categories list, using as display name`);
+                  }
+                }
+              }
+            }
+            
+            // Xử lý brand name - Improved logic
+            let brandName = 'Không xác định';
+            
+            if (product.brand) {
+              if (typeof product.brand === 'object' && product.brand.name) {
+                // Brand đã được populate từ server
+                brandName = product.brand.name;
+              } else if (typeof product.brand === 'string') {
+                // Brand là ID string hoặc tên, cần tìm tên
+                const brand = brands.find(b => b._id === product.brand);
+                if (brand && brand.name) {
+                  // Tìm thấy brand theo ID
+                  brandName = brand.name;
+                } else {
+                  // Không tìm thấy theo ID, có thể brand đã là tên
+                  // Kiểm tra xem có brand nào có tên giống không
+                  const brandByName = brands.find(b => 
+                    b.name && b.name.toLowerCase() === product.brand.toLowerCase()
+                  );
+                  if (brandByName) {
+                    brandName = brandByName.name;
+                  } else {
+                    // Không tìm thấy trong danh sách, sử dụng giá trị gốc làm tên
+                    brandName = product.brand;
+                    console.log(`Brand "${product.brand}" not found in brands list, using as display name`);
+                  }
+                }
+              }
+            }
+            
+            // If still "Không xác định", try to extract from product name
+            if (brandName === 'Không xác định' && product.name) {
+              const nameParts = product.name.split(' ');
+              
+              // Look for known brands in the product name
+              for (const part of nameParts) {
+                const partLower = part.toLowerCase();
+                if (['msi', 'acer', 'asus', 'dell', 'hp', 'lenovo', 'apple', 'samsung', 'lg', 'sony', 
+                     'intel', 'amd', 'nvidia', 'corsair', 'kingston', 'crucial', 'western', 'seagate',
+                     'logitech', 'razer', 'steelseries', 'hyperx', 'cooler', 'master', 'thermaltake',
+                     'gigabyte', 'asrock', 'evga', 'zotac'].includes(partLower)) {
+                  brandName = part.toUpperCase();
+                  break;
+                }
+              }
+              
+              // Fallback to position-based extraction
+              if (brandName === 'Không xác định' && nameParts.length >= 3) {
+                const possibleBrand = nameParts[2];
+                if (possibleBrand && 
+                    !['gaming', 'laptop', 'pc', 'màn', 'hình', 'chuột', 'bàn', 'phím'].includes(possibleBrand.toLowerCase()) &&
+                    possibleBrand.length >= 2) {
+                  brandName = possibleBrand;
+                }
+              }
+            }
             
             return {
               ...product,
-              categoryName: category ? category.name : 'Không xác định',
-              brandName: brand ? brand.name : 'Không xác định'
+              categoryName: categoryName,
+              brandName: brandName,
+              // Ensure shop data is available for display
+              shop: product.shop || product.shopId
             };
           } catch (mappingError) {
-            console.warn('Lỗi khi xử lý sản phẩm:', mappingError, 'Product:', product);
+            console.error('Lỗi khi xử lý sản phẩm:', mappingError, 'Product:', product);
             return {
               ...product,
-              categoryName: 'Không xác định',
-              brandName: 'Không xác định'
+              categoryName: product.category?.name || (typeof product.category === 'string' ? product.category : 'Không xác định'),
+              brandName: product.brand?.name || (typeof product.brand === 'string' ? product.brand : 'Không xác định'),
+              shop: product.shop || product.shopId
             };
           }
         });
         
         setProducts(productsWithNames);
+        console.log('Categories available for mapping:', categories);
+        console.log('Brands available for mapping:', brands);
         console.log('Fetched products with category/brand names:', productsWithNames);
+        console.log('Sample product for debugging:', productsWithNames[0]);
       }
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -166,23 +267,30 @@ const AdminProductManagement = () => {
       });
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
-  // Fetch categories, brands và products khi component mount hoặc refreshKey thay đổi
+  // Fetch categories, brands khi component mount hoặc refreshKey thay đổi
   useEffect(() => {
     const fetchCategoriesAndBrands = async () => {
       try {
+        console.log('Fetching categories and brands...');
+        
         // Fetch categories
         const categoriesResponse = await api.get('/categories');
         if (categoriesResponse.data && categoriesResponse.data.success) {
-          setCategories(categoriesResponse.data.data || []);
+          const fetchedCategories = categoriesResponse.data.data || [];
+          setCategories(fetchedCategories);
+          console.log('Categories loaded:', fetchedCategories);
         }
         
         // Fetch brands
         const brandsResponse = await api.get('/brands');
         if (brandsResponse.data && brandsResponse.data.success) {
-          setBrands(brandsResponse.data.data || []);
+          const fetchedBrands = brandsResponse.data.data || [];
+          setBrands(fetchedBrands);
+          console.log('Brands loaded:', fetchedBrands);
         }
         
         // Reset selections when refreshing
@@ -198,28 +306,46 @@ const AdminProductManagement = () => {
       }
     };
     
-    fetchCategoriesAndBrands().then(() => {
-      fetchProducts(); // Fetch products sau khi có categories và brands
-    });
-  }, [refreshKey]); // refreshKey thay đổi sẽ gọi lại useEffect này
+    fetchCategoriesAndBrands();
+  }, [refreshKey]);
 
-  // Thêm useEffect mới để theo dõi khi trang thay đổi
+  // Fetch products khi có categories và brands, hoặc khi trang thay đổi
   useEffect(() => {
-    // Chỉ fetch products khi component đã mount (categories và brands đã được tải)
+    // Chỉ fetch products khi component đã sẵn sàng và có đầy đủ categories/brands
     if (categories.length > 0 && brands.length > 0) {
+      console.log(`Fetching products for page ${pagination.page}, limit ${pagination.limit}`);
       fetchProducts();
       // Reset selections when changing page
       setSelectedProducts([]);
       setSelectAll(false);
     }
-  }, [pagination.page]); // Fetch lại khi trang thay đổi
+  }, [pagination.page, pagination.limit, categories.length, brands.length]);
+
+  // Thêm useEffect để re-fetch products khi refreshKey thay đổi
+  useEffect(() => {
+    // Re-fetch products khi refreshKey thay đổi
+    if (refreshKey > 0 && categories.length > 0 && brands.length > 0) {
+      console.log(`Refreshing products due to refreshKey change: ${refreshKey}, keeping current page: ${pagination.page}`);
+      fetchProducts();
+    }
+  }, [refreshKey]);
+
+  // Debug useEffect for editingProduct
+  useEffect(() => {
+    console.log('editingProduct changed:', editingProduct);
+    console.log('Form open status:', isFormOpen);
+  }, [editingProduct, isFormOpen]);
 
   // Hàm xử lý thay đổi trang
   const handlePageChange = (event, value) => {
-    setPagination(prev => ({
-      ...prev,
-      page: value
-    }));
+    console.log(`Page change requested: ${value}`);
+    setPagination(prev => {
+      console.log(`Updating pagination from page ${prev.page} to page ${value}`);
+      return {
+        ...prev,
+        page: value
+      };
+    });
   };
 
   // Hàm xử lý thay đổi số sản phẩm trên mỗi trang
@@ -297,22 +423,76 @@ const AdminProductManagement = () => {
   // Utility function to find category by name
   const findCategoryByName = (categoryName) => {
     if (!categoryName || !categories.length) return null;
-    return categories.find(cat => 
-      cat.name.toLowerCase() === categoryName.toLowerCase()
+    
+    // Tìm theo tên chính xác trước
+    const exactMatch = categories.find(cat => 
+      cat.name && cat.name.toLowerCase() === categoryName.toLowerCase()
     );
+    if (exactMatch) return exactMatch._id;
+    
+    // Tìm theo tên gần đúng (contains)
+    const partialMatch = categories.find(cat => 
+      cat.name && cat.name.toLowerCase().includes(categoryName.toLowerCase())
+    );
+    if (partialMatch) return partialMatch._id;
+    
+    // Nếu không tìm thấy trong database categories, thử tìm trong localStorage categories
+    try {
+      const savedCategories = localStorage.getItem('admin_categories');
+      if (savedCategories) {
+        const parsedCategories = JSON.parse(savedCategories);
+        const localCategory = parsedCategories.find(cat => 
+          cat.name && cat.name.toLowerCase() === categoryName.toLowerCase()
+        );
+        if (localCategory) {
+          // Nếu tìm thấy trong localStorage, tìm category tương ứng trong database
+          const dbCategory = categories.find(cat => 
+            cat.name && cat.name.toLowerCase() === localCategory.name.toLowerCase()
+          );
+          return dbCategory ? dbCategory._id : null;
+        }
+      }
+    } catch (error) {
+      console.warn('Error reading localStorage categories:', error);
+    }
+    
+    return null;
   };
 
   // Utility function to find brand by name  
   const findBrandByName = (brandName) => {
     if (!brandName || !brands.length) return null;
-    return brands.find(brand => 
-      brand.name.toLowerCase() === brandName.toLowerCase()
+    
+    // Tìm theo tên chính xác trước
+    const exactMatch = brands.find(brand => 
+      brand.name && brand.name.toLowerCase() === brandName.toLowerCase()
     );
+    if (exactMatch) return exactMatch._id;
+    
+    // Tìm theo tên gần đúng (contains)
+    const partialMatch = brands.find(brand => 
+      brand.name && brand.name.toLowerCase().includes(brandName.toLowerCase())
+    );
+    if (partialMatch) return partialMatch._id;
+    
+    return null;
   };
 
   const handleEdit = (product) => {
-    setEditingProduct(product);
-    setIsFormOpen(true);
+    console.log('handleEdit called with product:', product);
+    console.log('Product ID:', product?._id);
+    console.log('Product name:', product?.name);
+    
+    // Sử dụng callback để đảm bảo state được update đúng cách
+    setEditingProduct(prevProduct => {
+      console.log('Setting editingProduct from:', prevProduct, 'to:', product);
+      return product;
+    });
+    
+    setIsFormOpen(prevOpen => {
+      console.log('Setting isFormOpen from:', prevOpen, 'to: true');
+      return true;
+    });
   };
 
   const handleDelete = async (productId) => {
@@ -373,88 +553,87 @@ const AdminProductManagement = () => {
     }
   };
 
-  const handleOpenFormDialog = (product = null) => {
-    console.log('Opening form dialog with product:', product);
-    setEditingProduct(product);
-    setIsFormOpen(true);
-  };
-
   const handleCloseFormDialog = () => {
+    console.log('handleCloseFormDialog called, isSubmitting:', isSubmitting);
     if (isSubmitting) return;
+    console.log('Closing form dialog and resetting editingProduct');
     setIsFormOpen(false);
     setEditingProduct(null);
   };
 
   const handleFormSubmit = async (formData, images) => {
-    setIsSubmitting(true);
     try {
-      console.log('handleFormSubmit called with formData:', formData);
-      console.log('handleFormSubmit images:', images);
+      setIsSubmitting(true);
       
-      // Kiểm tra xem có file ảnh mới không
-      const hasImageFiles = images && images.length > 0;
-      // Extract other form data
-      const { existingImages, ...otherFormData } = formData;
+      console.log('=== PRODUCT SUBMIT DEBUG ===');
+      console.log('Edit mode:', !!editingProduct);
+      console.log('Form data received:', formData);
+      console.log('Images received:', images);
+      console.log('Editing product:', editingProduct);
       
+      // Tách images và existingImages từ formData
+      const { images: _, existingImages, ...otherFormData } = formData;
+      
+      // Tìm category ID từ tên category
+      if (otherFormData.category) {
+        const categoryId = findCategoryByName(otherFormData.category);
+        if (categoryId) {
+          otherFormData.category = categoryId;
+        } else {
+          // Nếu không tìm thấy category trong database, giữ nguyên tên để server xử lý
+          console.log(`Category "${otherFormData.category}" not found in database, keeping name for server to handle`);
+        }
+      }
+      
+      // Tìm brand ID từ tên brand
+      if (otherFormData.brand) {
+        const brandId = findBrandByName(otherFormData.brand);
+        if (brandId) {
+          otherFormData.brand = brandId;
+        } else {
+          // Nếu không tìm thấy brand trong database, giữ nguyên tên để server xử lý
+          console.log(`Brand "${otherFormData.brand}" not found in database, keeping name for server to handle`);
+        }
+      }
+
       let response;
       
-      if (hasImageFiles) {
+      if (images && images.length > 0) {
         // Sử dụng FormData nếu có file ảnh mới
-        const formDataObj = new FormData();
+        const formDataToSend = new FormData();
         
-        // Thêm các trường dữ liệu từ formData (otherFormData) vào FormData
-        // TRỪ TRƯỜNG 'images' vì chúng ta sẽ xử lý file riêng
         Object.keys(otherFormData).forEach(key => {
-          if (key !== 'images' && otherFormData[key] !== undefined && otherFormData[key] !== null) {
-            if (key === 'shopId' && typeof otherFormData[key] === 'object' && otherFormData[key]._id) {
-              formDataObj.append(key, otherFormData[key]._id); // Gửi ID của shop
-            } else {
-              formDataObj.append(key, otherFormData[key]);
-            }
-          }
+          formDataToSend.append(key, otherFormData[key]);
         });
         
-        // Thêm ảnh đã tồn tại (nếu có và không phải là file mới)
+        // Thêm ảnh mới
+        images.forEach(image => {
+          formDataToSend.append('images', image);
+        });
+        
+        // Thêm ảnh cũ nếu có
         if (existingImages && existingImages.length > 0) {
-          existingImages.forEach((url) => {
-            // Chỉ thêm nếu nó là một URL, không phải là đối tượng File còn sót lại từ logic cũ
-            if (typeof url === 'string') {
-              console.log(`Appending existing image to FormData: ${url}`);
-              formDataObj.append('existingImages', url); // Sử dụng key khác cho ảnh cũ nếu cần phân biệt rõ ràng hơn ở backend
-            }
-          });
-        } else if (editingProduct && editingProduct.images && Array.isArray(editingProduct.images)) {
-          // Bảo toàn ảnh gốc của sản phẩm nếu không có ảnh mới được thêm
-          editingProduct.images.forEach(url => {
-            if (typeof url === 'string') {
-              console.log(`Appending original product image to FormData: ${url}`);
-              formDataObj.append('existingImages', url);
-            }
+          existingImages.forEach(imageUrl => {
+            formDataToSend.append('existingImages', imageUrl);
           });
         }
         
-        // Thêm các file ảnh mới vào FormData với key 'images'
-        images.forEach(file => {
-          if (file instanceof File) { // Đảm bảo đó thực sự là một File object
-            console.log(`Appending new image file to FormData: ${file.name}`);
-            formDataObj.append('images', file);
-          }
-        });
-        
-        console.log('FormData entries:');
-        for (let [key, value] of formDataObj.entries()) {
-          console.log(`${key}: ${value instanceof File ? value.name : value}`);
-        }
-        
-        // QUAN TRỌNG: KHÔNG đặt header 'Content-Type' khi gửi FormData
-        // Axios sẽ tự động đặt đúng header với boundary
+        console.log('Sending FormData with new images');
         
         if (editingProduct && editingProduct._id) {
           console.log(`Updating product ${editingProduct._id} with FormData`);
-          response = await api.put(`/products/${editingProduct._id}`, formDataObj);
+          response = await api.put(
+            `/products/${editingProduct._id}`,
+            formDataToSend,
+            {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            }
+          );
         } else {
           console.log('Creating new product with FormData');
-          response = await api.post('/products', formDataObj);
+          response = await api.post('/products', formDataToSend, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
         }
       } else {
         // Sử dụng JSON nếu không có file ảnh mới
@@ -495,30 +674,42 @@ const AdminProductManagement = () => {
         }
       }
       
-      // Xử lý response dựa trên cấu trúc { status: 'success', data: { product: ... } }
-      // hoặc cấu trúc cũ { success: true, ... }
-      if ((response.data && response.data.success) || 
-          (response.data && response.data.status === 'success')) {
-        console.log('Server response success:', response.data);
+      console.log('Server response:', response.data);
+      
+      if (response.data.success) {
         setSnackbar({
           open: true,
-          message: editingProduct 
-            ? 'Cập nhật sản phẩm thành công!' 
-            : 'Thêm sản phẩm mới thành công!',
+          message: editingProduct ? 'Cập nhật sản phẩm thành công!' : 'Tạo sản phẩm thành công!',
           severity: 'success'
         });
-        handleCloseFormDialog();
-        // Refresh product list
+        
+        setIsFormOpen(false);
+        setEditingProduct(null);
+        
+        // Force refresh ngay lập tức và sau đó delay một chút
         setRefreshKey(prev => prev + 1);
+        
+        // Thêm một refresh delay để đảm bảo server đã commit changes
+        setTimeout(() => {
+          setRefreshKey(prev => prev + 1);
+          console.log('Force refreshing product list after edit...');
+        }, 500);
+        
+        console.log('Product saved successfully, refreshing list...');
       } else {
-        console.log('Server response failure:', response.data);
-        throw new Error(response.data?.message || response.data?.data?.message || 'Có lỗi xảy ra');
+        throw new Error(response.data.message || 'Không thể lưu sản phẩm');
       }
     } catch (error) {
-      console.error('Error submitting product:', error);
+      console.error('Lỗi khi lưu sản phẩm:', error);
+      console.error('Error details:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      
       setSnackbar({
         open: true,
-        message: error.response?.data?.message || error.message || 'Có lỗi xảy ra khi lưu sản phẩm',
+        message: `Có lỗi xảy ra: ${error.response?.data?.message || error.message}`,
         severity: 'error'
       });
     } finally {
@@ -908,10 +1099,24 @@ const AdminProductManagement = () => {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => setIsFormOpen(true)}
+            onClick={() => {
+              setEditingProduct(null);
+              setIsFormOpen(true);
+            }}
             sx={{ textTransform: 'none' }}
           >
             Thêm sản phẩm
+          </Button>
+          <Button
+            variant="outlined"
+            color="info"
+            onClick={() => {
+              console.log('Manual refresh triggered');
+              setRefreshKey(prev => prev + 1);
+            }}
+            sx={{ textTransform: 'none' }}
+          >
+            🔄 Refresh
           </Button>
           <Button
             variant="outlined"
@@ -984,6 +1189,7 @@ const AdminProductManagement = () => {
                     </TableCell>
                     <TableCell>Hình ảnh</TableCell>
                     <TableCell>Tên sản phẩm</TableCell>
+                    <TableCell>Shop</TableCell>
                     <TableCell>Danh mục</TableCell>
                     <TableCell>Thương hiệu</TableCell>
                     <TableCell>Giá</TableCell>
@@ -1020,6 +1226,27 @@ const AdminProductManagement = () => {
                         <Typography variant="body2" fontWeight="500">
                           {product.name}
                         </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box 
+                            sx={{ 
+                              width: 8, 
+                              height: 8, 
+                              bgcolor: product.shop?.status === 'approved' ? 'success.main' : 'warning.main',
+                              borderRadius: '50%',
+                              flexShrink: 0
+                            }}
+                          />
+                          <Box>
+                            <Typography variant="body2" fontWeight="500">
+                              {product.shop?.shopName || product.shopId?.shopName || 'Shop không xác định'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {product.shop?.status === 'approved' ? 'Đã duyệt' : 'Chờ duyệt'}
+                            </Typography>
+                          </Box>
+                        </Box>
                       </TableCell>
                       <TableCell>
                         <Chip 
@@ -1247,10 +1474,7 @@ const AdminProductManagement = () => {
       {/* Product Form Dialog */}
       <ProductFormDialog
         open={isFormOpen}
-        onClose={() => {
-          setIsFormOpen(false);
-          setEditingProduct(null);
-        }}
+        onClose={handleCloseFormDialog}
         onSubmit={handleFormSubmit}
         initialValues={editingProduct}
         isSubmitting={isSubmitting}

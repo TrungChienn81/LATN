@@ -103,7 +103,8 @@ const CheckoutPage = () => {
     ward: '',
     address: '',
     notes: '',
-    needInvoice: false
+    needInvoice: false,
+    paymentMethod: 'cod'
   });
   
   const [loading, setLoading] = useState(false);
@@ -167,7 +168,7 @@ const CheckoutPage = () => {
             ward: formData.ward
           }
         },
-        paymentMethod: 'cod',
+        paymentMethod: formData.paymentMethod,
         notes: formData.notes,
         needInvoice: formData.needInvoice,
         items: cart.items.map(item => ({
@@ -362,6 +363,38 @@ const CheckoutPage = () => {
                 label="Xuất hoá đơn cho đơn hàng"
               />
             </FormGroup>
+
+            {/* Payment Method Selection */}
+            <Typography variant="h6" gutterBottom>
+              Phương thức thanh toán
+            </Typography>
+            <FormControl component="fieldset" sx={{ mb: 3 }}>
+              <RadioGroup
+                value={formData.paymentMethod || 'cod'}
+                onChange={handleInputChange('paymentMethod')}
+              >
+                <FormControlLabel
+                  value="cod"
+                  control={<Radio />}
+                  label="Thanh toán khi nhận hàng (COD)"
+                />
+                <FormControlLabel
+                  value="momo"
+                  control={<Radio />}
+                  label="Ví MoMo"
+                />
+                <FormControlLabel
+                  value="vnpay"
+                  control={<Radio />}
+                  label="VNPay"
+                />
+                <FormControlLabel
+                  value="bank_transfer"
+                  control={<Radio />}
+                  label="Chuyển khoản ngân hàng"
+                />
+              </RadioGroup>
+            </FormControl>
 
             <Divider sx={{ my: 3 }} />
 

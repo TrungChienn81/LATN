@@ -18,13 +18,26 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  FormLabel,
+  RadioGroup,
+  FormControlLabel,
+  Radio
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   LocalShipping as LocalShippingIcon,
-  Schedule as ScheduleIcon
+  Schedule as ScheduleIcon,
+  Payment as PaymentIcon,
+  MonetizationOn as MonetizationOnIcon,
+  AccountBalance as BankIcon,
+  CreditCard as CardIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { formatPriceToVND } from '../utils/formatters';
@@ -37,6 +50,10 @@ const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({});
+  const [paymentDialog, setPaymentDialog] = useState({ open: false, order: null });
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [bankingDetails, setBankingDetails] = useState(null);
 
   // Get success message from navigation state
   const successOrderNumber = location.state?.orderNumber;
@@ -77,6 +94,27 @@ const OrdersPage = () => {
     return statusMap[status] || { label: status, color: 'default', icon: null };
   };
 
+  const getPaymentStatusInfo = (paymentStatus) => {
+    const paymentStatusMap = {
+      pending: { label: 'Chưa thanh toán', color: 'error', icon: <ScheduleIcon /> },
+      paid: { label: 'Đã thanh toán', color: 'success', icon: <CheckCircleIcon /> },
+      failed: { label: 'Thanh toán thất bại', color: 'error', icon: <CancelIcon /> },
+      refunded: { label: 'Đã hoàn tiền', color: 'info', icon: <MonetizationOnIcon /> }
+    };
+    return paymentStatusMap[paymentStatus] || { label: paymentStatus, color: 'default', icon: null };
+  };
+
+  const getPaymentMethodInfo = (paymentMethod) => {
+    const methodMap = {
+      cod: { label: 'Thanh toán khi nhận hàng', icon: <MonetizationOnIcon />, color: 'default' },
+      bank_transfer: { label: 'Chuyển khoản ngân hàng', icon: <BankIcon />, color: 'primary' },
+      momo: { label: 'Ví MoMo', icon: <PaymentIcon />, color: 'secondary' },
+      vnpay: { label: 'VNPay', icon: <CardIcon />, color: 'info' },
+      zalopay: { label: 'ZaloPay', icon: <PaymentIcon />, color: 'warning' }
+    };
+    return methodMap[paymentMethod] || { label: paymentMethod, icon: <PaymentIcon />, color: 'default' };
+  };
+
   const handleCancelOrder = async (orderId) => {
     if (!window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này?')) return;
 
@@ -93,6 +131,51 @@ const OrdersPage = () => {
       console.error('Error cancelling order:', error);
       toast.error(error.response?.data?.message || 'Có lỗi xảy ra khi hủy đơn hàng');
     }
+  };
+
+  const handlePaymentNow = (order) => {
+    setPaymentDialog({ open: true, order });
+    setSelectedPaymentMethod('momo'); // Default to MoMo
+  };
+
+  const handleProcessPayment = async () => {
+    if (!selectedPaymentMethod || !paymentDialog.order) return;
+
+    setProcessingPayment(true);
+    try {
+      // Call payment API
+      const response = await api.post(`/orders/${paymentDialog.order._id}/payment`, {
+        paymentMethod: selectedPaymentMethod
+      });
+
+      if (response.data.success) {
+        const { data } = response.data;
+        
+        if (data.paymentUrl) {
+          // Redirect to payment gateway for MoMo, VNPay, ZaloPay
+          window.location.href = data.paymentUrl;
+        } else if (data.paymentMethod === 'bank_transfer') {
+          // Show banking details for bank transfer
+          setBankingDetails(data.bankingDetails);
+          toast.success('Vui lòng chuyển khoản theo thông tin bên dưới');
+        } else {
+          toast.success('Thanh toán thành công!');
+          setPaymentDialog({ open: false, order: null });
+          fetchOrders(); // Refresh orders
+        }
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast.error('Có lỗi xảy ra khi xử lý thanh toán');
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  const closePaymentDialog = () => {
+    setPaymentDialog({ open: false, order: null });
+    setSelectedPaymentMethod('');
+    setBankingDetails(null);
   };
 
   if (loading) {
@@ -115,6 +198,22 @@ const OrdersPage = () => {
         </Alert>
       )}
 
+      {/* Payment Features Info */}
+      <Alert severity="info" sx={{ mb: 3 }}>
+        <Box>
+          <Typography variant="h6" gutterBottom>
+            🎉 Tính năng thanh toán mới!
+          </Typography>
+          <Typography variant="body2">
+            • <strong>Thanh toán trực tuyến:</strong> Hỗ trợ MoMo, VNPay để thanh toán ngay lập tức
+            <br />
+            • <strong>Chuyển khoản ngân hàng:</strong> Thông tin chi tiết và theo dõi tự động
+            <br />
+            • <strong>Trạng thái realtime:</strong> Cập nhật trạng thái thanh toán và đơn hàng ngay lập tức
+          </Typography>
+        </Box>
+      </Alert>
+
       {orders.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary">
@@ -128,6 +227,8 @@ const OrdersPage = () => {
         <Grid container spacing={3}>
           {orders.map((order) => {
             const statusInfo = getStatusInfo(order.orderStatus);
+            const paymentStatusInfo = getPaymentStatusInfo(order.paymentStatus);
+            const paymentMethodInfo = getPaymentMethodInfo(order.paymentMethod);
             
             return (
               <Grid item xs={12} key={order._id}>
@@ -151,17 +252,38 @@ const OrdersPage = () => {
                       </Box>
                       
                       <Box sx={{ textAlign: 'right' }}>
+                        {/* Status Chips */}
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 1 }}>
                         <Chip
                           icon={statusInfo.icon}
                           label={statusInfo.label}
                           color={statusInfo.color}
                           variant="outlined"
-                          sx={{ mb: 1 }}
-                        />
+                            size="small"
+                          />
+                          <Chip
+                            icon={paymentStatusInfo.icon}
+                            label={paymentStatusInfo.label}
+                            color={paymentStatusInfo.color}
+                            variant="filled"
+                            size="small"
+                          />
+                        </Box>
                         <Typography variant="h6" color="primary">
                           {formatPriceToVND(order.totalAmount)}
                         </Typography>
                       </Box>
+                    </Box>
+
+                    {/* Payment Method */}
+                    <Box sx={{ mb: 2 }}>
+                      <Chip
+                        icon={paymentMethodInfo.icon}
+                        label={paymentMethodInfo.label}
+                        color={paymentMethodInfo.color}
+                        variant="outlined"
+                        size="small"
+                      />
                     </Box>
 
                     <Divider sx={{ my: 2 }} />
@@ -253,6 +375,19 @@ const OrdersPage = () => {
                         </Button>
                       )}
                       
+                      {/* Payment Button - Show if payment is pending and order is not COD */}
+                      {order.paymentStatus === 'pending' && order.paymentMethod !== 'cod' && 
+                       ['pending', 'confirmed'].includes(order.orderStatus) && (
+                        <Button
+                          variant="contained"
+                          color="success"
+                          startIcon={<PaymentIcon />}
+                          onClick={() => handlePaymentNow(order)}
+                        >
+                          Thanh toán ngay
+                        </Button>
+                      )}
+                      
                       <Button variant="outlined">
                         Xem chi tiết
                       </Button>
@@ -286,6 +421,133 @@ const OrdersPage = () => {
           ))}
         </Box>
       )}
+
+      {/* Payment Dialog */}
+      <Dialog open={paymentDialog.open} onClose={closePaymentDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PaymentIcon />
+            Thanh toán đơn hàng #{paymentDialog.order?.orderNumber}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 3 }}>
+            Tổng tiền: <strong>{formatPriceToVND(paymentDialog.order?.totalAmount || 0)}</strong>
+          </Typography>
+          
+          {!bankingDetails ? (
+            <FormControl component="fieldset">
+              <FormLabel component="legend">Chọn phương thức thanh toán:</FormLabel>
+              <RadioGroup
+                value={selectedPaymentMethod}
+                onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+              >
+                <FormControlLabel
+                  value="momo"
+                  control={<Radio />}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <PaymentIcon />
+                      Ví MoMo
+                    </Box>
+                  }
+                />
+                <FormControlLabel
+                  value="vnpay"
+                  control={<Radio />}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <CardIcon />
+                      VNPay
+                    </Box>
+                  }
+                />
+                <FormControlLabel
+                  value="bank_transfer"
+                  control={<Radio />}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <BankIcon />
+                      Chuyển khoản ngân hàng
+                    </Box>
+                  }
+                />
+              </RadioGroup>
+            </FormControl>
+          ) : (
+            <Box>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Thông tin chuyển khoản
+                </Typography>
+              </Alert>
+              
+              <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Ngân hàng:
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold">
+                      {bankingDetails.bankName}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Số tài khoản:
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold" color="primary">
+                      {bankingDetails.accountNumber}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Tên tài khoản:
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold">
+                      {bankingDetails.accountName}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Nội dung chuyển khoản:
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold" color="error">
+                      {bankingDetails.transferContent}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Số tiền:
+                    </Typography>
+                    <Typography variant="h6" color="primary">
+                      {formatPriceToVND(bankingDetails.amount / 1000000)}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+              
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                {bankingDetails.note}
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closePaymentDialog}>
+            {bankingDetails ? 'Đóng' : 'Hủy'}
+          </Button>
+          {!bankingDetails && (
+            <Button
+              variant="contained"
+              onClick={handleProcessPayment}
+              disabled={!selectedPaymentMethod || processingPayment}
+            >
+              {processingPayment ? <CircularProgress size={20} /> : 'Thanh toán'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

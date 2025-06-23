@@ -225,8 +225,64 @@ const ProductCardNew = ({ product, onClick }) => {
               whiteSpace: 'nowrap',
               fontSize: '0.7rem'
             }}
+            title={`Debug: brandName=${product.brandName}, brand=${JSON.stringify(product.brand)}, product.name=${product.name}`}
           >
-            📱 {product.brandName || product.brand?.name || 'Không xác định'}
+            📱 {(() => {
+              // Try different sources for brand name
+              if (product.brandName && product.brandName !== 'Không xác định') {
+                return product.brandName;
+              }
+              
+              if (product.brand?.name && product.brand.name !== 'Không xác định') {
+                return product.brand.name;
+              }
+              
+              if (typeof product.brand === 'string' && 
+                  product.brand !== 'undefined' && 
+                  product.brand !== 'Không xác định' && 
+                  product.brand.trim() !== '') {
+                return product.brand;
+              }
+              
+              // Extract brand from product name if available
+              if (product.name) {
+                const nameParts = product.name.split(' ');
+                
+                // Look for brand names in different positions
+                for (let i = 0; i < nameParts.length; i++) {
+                  const part = nameParts[i];
+                  const partLower = part.toLowerCase();
+                  
+                  // Check if this part is a known brand
+                  if (['msi', 'acer', 'asus', 'dell', 'hp', 'lenovo', 'apple', 'samsung', 'lg', 'sony', 
+                       'intel', 'amd', 'nvidia', 'corsair', 'kingston', 'crucial', 'western', 'seagate',
+                       'logitech', 'razer', 'steelseries', 'hyperx', 'cooler', 'master', 'thermaltake',
+                       'gigabyte', 'asrock', 'evga', 'zotac', 'viewsonic', 'benq', 'philips'].includes(partLower)) {
+                    return part.toUpperCase();
+                  }
+                }
+                
+                // Fallback: try position-based extraction for gaming laptops
+                if (nameParts.length >= 3) {
+                  const possibleBrand = nameParts[2];
+                  if (possibleBrand && 
+                      !['gaming', 'laptop', 'pc', 'màn', 'hình', 'chuột', 'bàn', 'phím', 'máy', 'tính'].includes(possibleBrand.toLowerCase()) &&
+                      possibleBrand.length >= 2) {
+                    return possibleBrand.charAt(0).toUpperCase() + possibleBrand.slice(1);
+                  }
+                }
+                
+                // Try first word that's not common
+                for (const part of nameParts) {
+                  if (part.length >= 2 && 
+                      !['laptop', 'gaming', 'pc', 'máy', 'tính', 'màn', 'hình', 'chuột', 'bàn', 'phím'].includes(part.toLowerCase())) {
+                    return part.charAt(0).toUpperCase() + part.slice(1);
+                  }
+                }
+              }
+              
+              return 'Đa thương hiệu';
+            })()}
           </Typography>
         </Box>
 

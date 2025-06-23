@@ -22,6 +22,28 @@ export const formatPriceToVND = (priceInMillions) => {
 };
 
 /**
+ * Format price directly from VND value (no conversion needed)
+ * @param {number|string} priceInVND - Price in VND
+ * @returns {string} Formatted price string with VND symbol
+ */
+export const formatVNDDirectly = (priceInVND) => {
+  if (priceInVND == null || isNaN(priceInVND)) {
+    return 'Liên hệ';
+  }
+  
+  const price = parseFloat(priceInVND);
+  
+  // Format with thousand separators using 'decimal' style
+  const formattedNumber = new Intl.NumberFormat('vi-VN', {
+    style: 'decimal',
+    maximumFractionDigits: 0
+  }).format(price);
+  
+  // Append ' đ' manually
+  return `${formattedNumber} đ`;
+};
+
+/**
  * Convert price from VND to millions
  * @param {number|string} priceInVND - Price in VND
  * @returns {number} Price in millions
@@ -36,11 +58,6 @@ export const convertVNDToMillions = (priceInVND) => {
     return 0;
   }
 
-  // If price is already in millions (less than 1000), return as is
-  if (priceInVND < 1000) {
-    return priceInVND;
-  }
-
-  // Convert to millions
+  // Always convert to millions by dividing by 1,000,000
   return priceInVND / 1000000;
 }; 

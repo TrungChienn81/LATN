@@ -24,7 +24,7 @@ import { ImageWithFallback } from '../components/common/ImageWithFallback';
 import ProductCardNew from '../components/product/ProductCardNew';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { logUserBehavior } from '../utils/analytics';
+import { logUserBehavior, getPersonalizedRecommendations, getTrendingProducts } from '../utils/analytics';
 
 // Component để theo dõi hành vi người dùng
 const ProductTracker = ({ product, children }) => {
@@ -57,51 +57,22 @@ const RecommendedProducts = () => {
       
       try {
         setLoading(true);
-        // Tạm thời sử dụng dữ liệu mẫu thay vì gọi API
-        // const response = await api.get('/ai/recommendations');
-        // if (response.data.success) {
-        //   setProducts(response.data.recommendations);
-        // }
         
-        // Dữ liệu mẫu cho recommendations
-        const mockRecommendations = [
-          {
-            _id: 'rec1',
-            name: 'Laptop Gaming MSI GF63',
-            price: 22990000,
-            discountPrice: 21490000,
-            images: ['/images/products/laptop-1.jpg'],
-            slug: 'laptop-gaming-msi-gf63'
-          },
-          {
-            _id: 'rec2',
-            name: 'PC Gaming RTX 4060',
-            price: 25490000,
-            discountPrice: null,
-            images: ['/images/products/pc-1.jpg'],
-            slug: 'pc-gaming-rtx-4060'
-          },
-          {
-            _id: 'rec3',
-            name: 'RAM Kingston Fury 32GB',
-            price: 2190000,
-            discountPrice: 1990000,
-            images: ['/images/products/ram-1.jpg'],
-            slug: 'ram-kingston-fury-32gb'
-          },
-          {
-            _id: 'rec4',
-            name: 'Chuột Logitech G Pro X',
-            price: 2890000,
-            discountPrice: null,
-            images: ['/images/products/mouse-1.jpg'],
-            slug: 'chuot-logitech-g-pro-x'
+        // Sử dụng AI recommendations thật
+        const response = await getPersonalizedRecommendations(4);
+        if (response.success && response.data.recommendations.length > 0) {
+          setProducts(response.data.recommendations);
+        } else {
+          // Fallback to regular products if no recommendations
+          const fallbackResponse = await api.get('/products?limit=4&sort=newest');
+          if (fallbackResponse.data.success) {
+            setProducts(fallbackResponse.data.data);
           }
-        ];
-        
-        setProducts(mockRecommendations);
+        }
       } catch (error) {
         console.error('Error fetching recommendations:', error);
+        // Final fallback - empty array
+        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -314,6 +285,141 @@ const ProductSection = ({ title, fetchUrl, viewAllUrl }) => {
   );
 };
 
+// Component hiển thị danh mục sản phẩm dạng sidebar
+const CategorySidebar = () => {
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    const loadCategories = () => {
+      try {
+        // Load categories from localStorage (same as admin panel)
+        const savedCategories = localStorage.getItem('admin_categories');
+        if (savedCategories) {
+          const parsedCategories = JSON.parse(savedCategories);
+          // Transform admin categories format to match the expected format
+          const transformedCategories = parsedCategories
+            .filter(cat => cat.status === 'active') // Only show active categories
+            .map(cat => ({
+              _id: cat.id,
+              name: cat.name,
+              slug: cat.name.toLowerCase().replace(/\s+/g, '-'),
+              icon: cat.icon,
+              color: cat.color,
+              productCount: cat.productCount
+            }));
+          setCategories(transformedCategories);
+        } else {
+          // Default categories if localStorage is empty
+          const defaultCategories = [
+            { _id: 1, name: 'Gaming', slug: 'gaming', icon: 'G', color: '#1976d2', productCount: 285 },
+            { _id: 2, name: 'Không xác định', slug: 'khong-xac-dinh', icon: 'K', color: '#757575', productCount: 8 },
+            { _id: 3, name: 'General', slug: 'general', icon: 'G', color: '#2e7d32', productCount: 156 }
+          ];
+          setCategories(defaultCategories);
+        }
+      } catch (error) {
+        console.error('Error loading categories from localStorage:', error);
+        // Fallback to default categories
+        const defaultCategories = [
+          { _id: 1, name: 'Gaming', slug: 'gaming', icon: 'G', color: '#1976d2', productCount: 285 },
+          { _id: 2, name: 'Không xác định', slug: 'khong-xac-dinh', icon: 'K', color: '#757575', productCount: 8 },
+          { _id: 3, name: 'General', slug: 'general', icon: 'G', color: '#2e7d32', productCount: 156 }
+        ];
+        setCategories(defaultCategories);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadCategories();
+    
+    // Listen for localStorage changes (when admin modifies categories)
+    const handleStorageChange = (e) => {
+      if (e.key === 'admin_categories') {
+        loadCategories();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for custom event when categories are updated in the same tab
+    const handleCategoriesUpdate = () => {
+      loadCategories();
+    };
+    
+    window.addEventListener('categoriesUpdated', handleCategoriesUpdate);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('categoriesUpdated', handleCategoriesUpdate);
+    };
+  }, []);
+  
+  if (loading) {
+    return (
+      <Box>
+        {[1, 2, 3, 4].map((item) => (
+          <Box key={item} sx={{ mb: 1 }}>
+            <Skeleton variant="rectangular" height={50} />
+          </Box>
+        ))}
+      </Box>
+    );
+  }
+  
+  return (
+    <Box>
+      {categories.map((category) => (
+        <Paper
+          key={category._id}
+          elevation={0}
+          variant="outlined"
+          sx={{
+            mb: 1,
+            p: 2,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            borderRadius: 1,
+            '&:hover': {
+              bgcolor: 'primary.light',
+              color: 'white',
+              transform: 'translateX(4px)'
+            },
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2
+          }}
+          onClick={() => navigate(`/categories/${category.slug}`)}
+        >
+          {/* Use icon and color from admin categories */}
+          <Box 
+            sx={{ 
+              width: 32, 
+              height: 32, 
+              flexShrink: 0,
+              bgcolor: category.color || 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%'
+            }}
+          >
+            <Typography variant="body2" color="white" sx={{ fontWeight: 'bold' }}>
+              {category.icon || category.name.charAt(0)}
+            </Typography>
+          </Box>
+          
+          <Typography variant="body2" sx={{ fontWeight: 'medium', flex: 1 }}>
+            {category.name}
+          </Typography>
+        </Paper>
+      ))}
+    </Box>
+  );
+};
+
 // Component hiển thị danh mục sản phẩm
 const CategorySection = () => {
   const [categories, setCategories] = useState([]);
@@ -321,20 +427,69 @@ const CategorySection = () => {
   const navigate = useNavigate();
   
   useEffect(() => {
-    const fetchCategories = async () => {
+    const loadCategories = () => {
       try {
-        const response = await api.get('/categories');
-        if (response.data.success) {
-          setCategories(response.data.data);
+        // Load categories from localStorage (same as admin panel)
+        const savedCategories = localStorage.getItem('admin_categories');
+        if (savedCategories) {
+          const parsedCategories = JSON.parse(savedCategories);
+          // Transform admin categories format to match the expected format
+          const transformedCategories = parsedCategories
+            .filter(cat => cat.status === 'active') // Only show active categories
+            .map(cat => ({
+              _id: cat.id,
+              name: cat.name,
+              slug: cat.name.toLowerCase().replace(/\s+/g, '-'),
+              icon: cat.icon,
+              color: cat.color,
+              productCount: cat.productCount
+            }));
+          setCategories(transformedCategories);
+        } else {
+          // Default categories if localStorage is empty
+          const defaultCategories = [
+            { _id: 1, name: 'Gaming', slug: 'gaming', icon: 'G', color: '#1976d2', productCount: 285 },
+            { _id: 2, name: 'Không xác định', slug: 'khong-xac-dinh', icon: 'K', color: '#757575', productCount: 8 },
+            { _id: 3, name: 'General', slug: 'general', icon: 'G', color: '#2e7d32', productCount: 156 }
+          ];
+          setCategories(defaultCategories);
         }
       } catch (error) {
-        console.error('Error fetching categories:', error);
+        console.error('Error loading categories from localStorage:', error);
+        // Fallback to default categories
+        const defaultCategories = [
+          { _id: 1, name: 'Gaming', slug: 'gaming', icon: 'G', color: '#1976d2', productCount: 285 },
+          { _id: 2, name: 'Không xác định', slug: 'khong-xac-dinh', icon: 'K', color: '#757575', productCount: 8 },
+          { _id: 3, name: 'General', slug: 'general', icon: 'G', color: '#2e7d32', productCount: 156 }
+        ];
+        setCategories(defaultCategories);
       } finally {
         setLoading(false);
       }
     };
     
-    fetchCategories();
+    loadCategories();
+    
+    // Listen for localStorage changes (when admin modifies categories)
+    const handleStorageChange = (e) => {
+      if (e.key === 'admin_categories') {
+        loadCategories();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for custom event when categories are updated in the same tab
+    const handleCategoriesUpdate = () => {
+      loadCategories();
+    };
+    
+    window.addEventListener('categoriesUpdated', handleCategoriesUpdate);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('categoriesUpdated', handleCategoriesUpdate);
+    };
   }, []);
   
   if (loading) {
@@ -377,21 +532,13 @@ const CategorySection = () => {
               }}
               onClick={() => navigate(`/categories/${category.slug}`)}
             >
-              {category.image ? (
-                <Box sx={{ width: 64, height: 64, mb: 1 }}>
-                  <ImageWithFallback
-                    src={category.image}
-                    alt={category.name}
-                    sx={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                </Box>
-              ) : (
+              {/* Use icon and color from admin categories */}
                 <Box 
                   sx={{ 
                     width: 64, 
                     height: 64, 
                     mb: 1, 
-                    bgcolor: 'primary.light',
+                  bgcolor: category.color || 'primary.light',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -399,10 +546,9 @@ const CategorySection = () => {
                   }}
                 >
                   <Typography variant="h6" color="white">
-                    {category.name.charAt(0)}
+                  {category.icon || category.name.charAt(0)}
                   </Typography>
                 </Box>
-              )}
               
               <Typography variant="subtitle2">{category.name}</Typography>
             </Paper>
@@ -448,18 +594,64 @@ const PromoBanner = ({ src, alt, link }) => {
 // Component chính trang chủ
 function HomePage() {
   return (
-    <Box>
-      <HeroSlider />
+    <Box sx={{ width: '100%', overflow: 'hidden' }}>
+      {/* Hero Section with Category Sidebar */}
+      <Box sx={{ display: 'flex', width: '100%', position: 'relative' }}>
+        {/* Left sidebar - Danh mục sản phẩm (background riêng) */}
+        <Box
+          sx={{
+            width: { xs: 0, md: '240px' }, 
+            flexShrink: 0,
+            display: { xs: 'none', md: 'block' },
+            position: 'relative',
+            backgroundColor: '#f8f9fa', // Background riêng cho sidebar
+            borderRight: '1px solid #e0e0e0' // Thêm đường viền phân cách
+          }}
+        >
+          <Paper 
+            elevation={0} 
+            sx={{ 
+              p: 2, 
+              height: '450px',
+              overflowY: 'auto',
+              borderRadius: 0,
+              backgroundColor: 'transparent', // Trong suốt để hiện background của Box cha
+              border: 'none',
+              m: 0,
+              position: 'sticky',
+              top: 0
+            }}
+          >
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 2, color: '#333' }}>
+              Danh mục sản phẩm
+            </Typography>
+            <CategorySidebar />
+          </Paper>
+        </Box>
+        
+        {/* Right - Hero Slider (background riêng) */}
+        <Box sx={{ 
+          flex: 1, 
+          minWidth: 0,
+          backgroundColor: '#fff' // Background riêng cho Hero Slider
+        }}>
+          <HeroSlider />
+        </Box>
+      </Box>
       
-      <Container maxWidth="lg">
-        {/* Danh mục sản phẩm */}
-        <CategorySection />
-        
-        {/* Sản phẩm gợi ý cá nhân hóa - chỉ hiển thị khi đã đăng nhập */}
-        {/* RecommendedProducts section removed */}
-        
-
-        
+      {/* Mobile Category Section - hiện trên mobile */}
+      <Container maxWidth="lg" sx={{ display: { xs: 'block', md: 'none' }, mt: 2 }}>
+        <Paper elevation={1} sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
+            Danh mục sản phẩm
+          </Typography>
+          <CategorySidebar />
+        </Paper>
+      </Container>
+      
+      {/* Product Sections */}
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Box sx={{ mt: 4 }}>
         {/* Sản phẩm mới nhất */}
         <ProductSection 
           title="Sản phẩm mới nhất" 
@@ -474,14 +666,13 @@ function HomePage() {
           viewAllUrl="/products?sort=popular"
         />
         
-        
-        
         {/* Sản phẩm giảm giá */}
         <ProductSection 
           title="Giảm giá sốc" 
           fetchUrl="/products?sort=discount&limit=8" 
           viewAllUrl="/products?sort=discount"
         />
+        </Box>
       </Container>
     </Box>
   );

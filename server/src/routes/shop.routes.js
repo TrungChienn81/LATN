@@ -56,10 +56,34 @@ router.put(
     shopController.updateShop
 );
 
+// Lấy thống kê cho shop dashboard
+router.get(
+    '/my-shop/stats',
+    protect,
+    shopController.getShopStats
+);
+
+// Lấy đơn hàng của shop
+router.get(
+    '/my-shop/orders',
+    protect,
+    shopController.getShopOrders
+);
+
+// Cập nhật trạng thái đơn hàng của shop
+router.put(
+    '/my-shop/orders/:orderId/status',
+    protect,
+    shopController.updateShopOrderStatus
+);
+
 // CÁC ROUTE CHUNG (CÔNG KHAI)
 
 // Lấy danh sách shops
 router.get('/', shopController.getAllShops);
+
+// Lấy shop theo ID với thống kê
+router.get('/:id/stats', shopController.getShopByIdWithStats);
 
 // Lấy shop theo ID
 router.get('/:id', shopController.getShopById);

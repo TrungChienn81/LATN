@@ -32,13 +32,20 @@ export const logUserBehavior = async (action, productId, metadata = {}) => {
  * @param {number} limit - Số lượng recommendation muốn lấy 
  * @returns {Promise} - Promise chứa danh sách sản phẩm được đề xuất
  */
-export const getPersonalizedRecommendations = async (userId, limit = 8) => {
+export const getPersonalizedRecommendations = async (limit = 8) => {
   try {
     const response = await api.get(`/ai/recommendations?limit=${limit}`);
     return response.data;
   } catch (error) {
     console.error('Error fetching personalized recommendations:', error);
-    throw error;
+    // Return fallback data instead of throwing error
+    return {
+      success: false,
+      data: {
+        recommendations: [],
+        based_on: 'fallback'
+      }
+    };
   }
 };
 
@@ -69,6 +76,13 @@ export const getTrendingProducts = async (limit = 8) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching trending products:', error);
-    throw error;
+    // Return fallback data
+    return {
+      success: false,
+      data: {
+        trending_products: [],
+        timeframe_days: 7
+      }
+    };
   }
 };

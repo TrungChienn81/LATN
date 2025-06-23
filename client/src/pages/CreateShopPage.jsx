@@ -45,6 +45,7 @@ const CreateShopPage = () => {
         description: formData.description || '',
         contactPhone: formData.phone,
         contactEmail: formData.email,
+        adminPassword: formData.adminPassword,
         address: {
           street: formData.address,
           city: '',

@@ -5,11 +5,18 @@ const {
   getAllUsers,
   getUserById,
   updateUser,
-  deleteUser
+  deleteUser,
+  updateProfile,
+  changePassword,
+  getUserOrders,
+  getUserWishlist,
+  addToWishlist,
+  removeFromWishlist
 } = require('../controllers/user.controller');
 
 const protect = require('../middleware/protect'); // Middleware xác thực
 const authorize = require('../middleware/authorize'); // Middleware phân quyền
+const { protect: auth, restrictTo } = require('../middleware/auth.middleware');
 
 // Tất cả các route dưới đây đều yêu cầu đăng nhập (protect) và quyền admin (authorize(['admin']))
 
@@ -24,5 +31,22 @@ router.put('/:id', protect, authorize(['admin']), updateUser);
 
 // DELETE /api/users/:id - Xóa người dùng
 router.delete('/:id', protect, authorize(['admin']), deleteUser);
+
+// Admin routes (require admin authentication)
+router.get('/admin/:id', auth, restrictTo('admin'), getUserById);
+router.put('/admin/:id', auth, restrictTo('admin'), updateUser);
+router.delete('/admin/:id', auth, restrictTo('admin'), deleteUser);
+
+// User profile routes (require user authentication)
+router.put('/profile', auth, updateProfile);
+router.put('/change-password', auth, changePassword);
+
+// User orders routes
+router.get('/orders', auth, getUserOrders);
+
+// User wishlist routes
+router.get('/wishlist', auth, getUserWishlist);
+router.post('/wishlist', auth, addToWishlist);
+router.delete('/wishlist/:productId', auth, removeFromWishlist);
 
 module.exports = router; 

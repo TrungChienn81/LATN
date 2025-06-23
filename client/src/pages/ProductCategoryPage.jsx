@@ -35,14 +35,27 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 import api from '../services/api';
-import ProductCard from '../components/product/ProductCard';
-import ProductListItem from '../components/product/ProductListItem';
+import ProductCardNew from '../components/product/ProductCardNew';
 import { logUserBehavior } from '../utils/analytics';
 import { useAuth } from '../contexts/AuthContext';
 
 // Format currency
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value * 1000000);
+};
+
+// Component để theo dõi hành vi người dùng
+const ProductTracker = ({ product, children }) => {
+  const { user } = useAuth();
+  
+  useEffect(() => {
+    // Ghi lại hành vi xem sản phẩm khi component render
+    if (user) {
+      logUserBehavior('view', product._id);
+    }
+  }, [product._id, user]);
+  
+  return children;
 };
 
 const ProductCategoryPage = () => {
@@ -57,7 +70,6 @@ const ProductCategoryPage = () => {
   const [products, setProducts] = useState([]);
   const [category, setCategory] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('grid');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -65,7 +77,7 @@ const ProductCategoryPage = () => {
   // Pagination
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 12,
+    limit: 20, // Increase limit for 5-column layout
     total: 0,
     totalPages: 0
   });
@@ -187,24 +199,70 @@ const ProductCategoryPage = () => {
   useEffect(() => {
     const fetchFilterOptions = async () => {
       try {
-        // Fetch categories
-        const categoriesRes = await api.get('/categories');
-        if (categoriesRes.data.success) {
-          setCategories(categoriesRes.data.data);
+        // Load categories from localStorage first (same as homepage)
+        const savedCategories = localStorage.getItem('admin_categories');
+        if (savedCategories) {
+          const parsedCategories = JSON.parse(savedCategories);
+          const transformedCategories = parsedCategories
+            .filter(cat => cat.status === 'active')
+            .map(cat => ({
+              _id: cat.id,
+              name: cat.name,
+              slug: cat.name.toLowerCase().replace(/\s+/g, '-'),
+              icon: cat.icon,
+              color: cat.color,
+              productCount: cat.productCount
+            }));
+          setCategories(transformedCategories);
+          
+          // Find current category if categorySlug exists
+          if (categorySlug) {
+            const currentCategory = transformedCategories.find(cat => cat.slug === categorySlug);
+            if (currentCategory) {
+              setCategory(currentCategory);
+            }
+          }
+        }
+        
+        // Also try to fetch from API as fallback
+        try {
+          const categoriesRes = await api.get('/categories');
+          if (categoriesRes.data.success) {
+            const apiCategories = categoriesRes.data.data;
+            // If we don't have localStorage categories, use API categories
+            if (!savedCategories) {
+              setCategories(apiCategories);
+              if (categorySlug) {
+                const categoryRes = await api.get(`/categories/slug/${categorySlug}`);
+                if (categoryRes.data.success) {
+                  setCategory(categoryRes.data.data);
+                }
+              }
+            }
+          }
+        } catch (apiError) {
+          console.log('API categories not available, using localStorage only');
         }
         
         // Fetch brands
-        const brandsRes = await api.get('/brands');
-        if (brandsRes.data.success) {
-          setBrands(brandsRes.data.data);
-        }
-        
-        // Fetch current category if categorySlug exists
-        if (categorySlug) {
-          const categoryRes = await api.get(`/categories/slug/${categorySlug}`);
-          if (categoryRes.data.success) {
-            setCategory(categoryRes.data.data);
+        try {
+          const brandsRes = await api.get('/brands');
+          if (brandsRes.data.success) {
+            setBrands(brandsRes.data.data);
           }
+        } catch (brandError) {
+          console.log('Brands API not available');
+          // Set some default brands for demo
+          setBrands([
+            { _id: 'msi', name: 'MSI' },
+            { _id: 'asus', name: 'ASUS' },
+            { _id: 'hp', name: 'HP' },
+            { _id: 'dell', name: 'Dell' },
+            { _id: 'acer', name: 'Acer' },
+            { _id: 'logitech', name: 'Logitech' },
+            { _id: 'corsair', name: 'Corsair' },
+            { _id: 'custom', name: 'Custom Build' }
+          ]);
         }
       } catch (error) {
         console.error('Error fetching filter options:', error);
@@ -220,61 +278,94 @@ const ProductCategoryPage = () => {
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        // Tạo query params
+        // Fetch products from API for all categories including gaming
         const params = new URLSearchParams();
         
         // Add pagination
         params.append('page', pagination.page);
         params.append('limit', pagination.limit);
         
-        // Add sort
-        params.append('sort', sort);
-        
-        // Add category filter
+        // Add category filter using categoryName for better matching
         if (categorySlug) {
-          params.append('category', categorySlug);
+          if (categorySlug === 'gaming') {
+            params.append('categoryName', 'Gaming');
+          } else {
+            params.append('categoryName', categorySlug);
+          }
         }
         
-        // Add price range filter
+        // Add sort
+        switch (sort) {
+          case 'price_asc':
+            params.append('sort', 'price');
+            break;
+          case 'price_desc':
+            params.append('sort', '-price');
+            break;
+          case 'popular':
+            params.append('sort', '-reviewCount');
+            break;
+          case 'rating':
+            params.append('sort', '-rating');
+            break;
+          default: // newest
+            params.append('sort', '-createdAt');
+            break;
+        }
+        
+        // Add price range filter (convert millions to actual price)
         if (filters.price[0] > 0 || filters.price[1] < 100) {
-          params.append('price_min', filters.price[0]);
-          params.append('price_max', filters.price[1]);
+          const priceMin = filters.price[0] * 1000000;
+          const priceMax = filters.price[1] * 1000000;
+          params.append('price[gte]', priceMin);
+          params.append('price[lte]', priceMax);
         }
         
         // Add brand filters
         if (filters.brands && filters.brands.length > 0) {
-          params.append('brands', JSON.stringify(filters.brands));
+          filters.brands.forEach(brand => {
+            params.append('brand', brand);
+          });
         }
         
-        // Add technical specs filters
-        if (filters.ram && filters.ram.length > 0) {
-          params.append('ram', JSON.stringify(filters.ram));
-        }
-        
-        if (filters.storage && filters.storage.length > 0) {
-          params.append('storage', JSON.stringify(filters.storage));
-        }
-        
-        if (filters.processor && filters.processor.length > 0) {
-          params.append('processor', JSON.stringify(filters.processor));
-        }
-        
-        if (filters.gpu && filters.gpu.length > 0) {
-          params.append('gpu', JSON.stringify(filters.gpu));
-        }
+        console.log(`Fetching products for category: ${categorySlug} with params:`, params.toString());
         
         // Fetch products
-        const response = await api.get(`/products?${params}`);
-        if (response.data.success) {
-          setProducts(response.data.data);
+        try {
+          const response = await api.get(`/products?${params}`);
+          console.log('Products API response:', response.data);
+          
+          if (response.data.success) {
+            const fetchedProducts = response.data.data || [];
+            console.log(`Found ${fetchedProducts.length} products for category: ${categorySlug}`);
+            
+            setProducts(fetchedProducts);
+            setPagination({
+              ...pagination,
+              total: response.data.total || fetchedProducts.length,
+              totalPages: response.data.totalPages || Math.ceil(fetchedProducts.length / pagination.limit)
+            });
+          } else {
+            console.log('API response not successful:', response.data);
+            setProducts([]);
+            setPagination({
+              ...pagination,
+              total: 0,
+              totalPages: 0
+            });
+          }
+        } catch (apiError) {
+          console.error('Error fetching products from API:', apiError);
+          setProducts([]);
           setPagination({
             ...pagination,
-            total: response.data.total,
-            totalPages: response.data.totalPages
+            total: 0,
+            totalPages: 0
           });
         }
       } catch (error) {
         console.error('Error fetching products:', error);
+        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -322,42 +413,9 @@ const ProductCategoryPage = () => {
         </Box>
       )}
       
-      {/* Category Filter (when on /products page) */}
-      {!categorySlug && (
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>Danh mục</Typography>
-          <List disablePadding>
-            {categories.map((cat) => (
-              <ListItem 
-                key={cat._id} 
-                dense 
-                disablePadding
-                sx={{ py: 0.5 }}
-              >
-                <FormControlLabel
-                  control={
-                    <Checkbox 
-                      checked={filters.category === cat.slug} 
-                      onChange={() => {
-                        if (filters.category === cat.slug) {
-                          handleFilterChange('category', '');
-                        } else {
-                          navigate(`/categories/${cat.slug}`);
-                        }
-                      }} 
-                    />
-                  }
-                  label={cat.name}
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      )}
-      
       {/* Price Range Filter */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" gutterBottom>Khoảng giá</Typography>
+        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>Khoảng giá</Typography>
         <Box sx={{ px: 2 }}>
           <Slider
             value={filters.price}
@@ -375,11 +433,13 @@ const ProductCategoryPage = () => {
         </Box>
       </Box>
       
+      <Divider sx={{ my: 2 }} />
+      
       {/* Brand Filter */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" gutterBottom>Thương hiệu</Typography>
+        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>Thương hiệu</Typography>
         <List disablePadding>
-          {brands.map((brand) => (
+          {brands.slice(0, 6).map((brand) => (
             <ListItem 
               key={brand._id} 
               dense 
@@ -400,21 +460,25 @@ const ProductCategoryPage = () => {
                   />
                 }
                 label={brand.name}
+                sx={{ fontSize: '0.875rem' }}
               />
             </ListItem>
           ))}
         </List>
       </Box>
       
+      <Divider sx={{ my: 2 }} />
+      
       {/* RAM Filter */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" gutterBottom>RAM</Typography>
+        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>RAM</Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           {['4 GB', '8 GB', '16 GB', '32 GB', '64 GB'].map((ram) => (
             <Chip
               key={ram}
               label={ram}
               clickable
+              size="small"
               color={filters.ram.includes(ram) ? 'primary' : 'default'}
               variant={filters.ram.includes(ram) ? 'filled' : 'outlined'}
               onClick={() => {
@@ -431,13 +495,14 @@ const ProductCategoryPage = () => {
       
       {/* Storage Filter */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" gutterBottom>Ổ cứng</Typography>
+        <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>Ổ cứng</Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           {['256 GB', '512 GB', '1 TB', '2 TB', '4 TB'].map((storage) => (
             <Chip
               key={storage}
               label={storage}
               clickable
+              size="small"
               color={filters.storage.includes(storage) ? 'primary' : 'default'}
               variant={filters.storage.includes(storage) ? 'filled' : 'outlined'}
               onClick={() => {
@@ -445,52 +510,6 @@ const ProductCategoryPage = () => {
                   handleFilterChange('storage', filters.storage.filter(s => s !== storage));
                 } else {
                   handleFilterChange('storage', [...filters.storage, storage]);
-                }
-              }}
-            />
-          ))}
-        </Box>
-      </Box>
-      
-      {/* Processor Filter */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" gutterBottom>CPU</Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          {['Intel Core i3', 'Intel Core i5', 'Intel Core i7', 'Intel Core i9', 'AMD Ryzen 5', 'AMD Ryzen 7', 'AMD Ryzen 9'].map((cpu) => (
-            <Chip
-              key={cpu}
-              label={cpu}
-              clickable
-              color={filters.processor.includes(cpu) ? 'primary' : 'default'}
-              variant={filters.processor.includes(cpu) ? 'filled' : 'outlined'}
-              onClick={() => {
-                if (filters.processor.includes(cpu)) {
-                  handleFilterChange('processor', filters.processor.filter(p => p !== cpu));
-                } else {
-                  handleFilterChange('processor', [...filters.processor, cpu]);
-                }
-              }}
-            />
-          ))}
-        </Box>
-      </Box>
-      
-      {/* GPU Filter */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" gutterBottom>Card đồ họa</Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          {['NVIDIA GTX 1650', 'NVIDIA RTX 3050', 'NVIDIA RTX 3060', 'NVIDIA RTX 3070', 'NVIDIA RTX 4050', 'NVIDIA RTX 4060', 'NVIDIA RTX 4070', 'AMD Radeon RX 6600', 'AMD Radeon RX 6700', 'Intel Iris Xe'].map((gpu) => (
-            <Chip
-              key={gpu}
-              label={gpu}
-              clickable
-              color={filters.gpu.includes(gpu) ? 'primary' : 'default'}
-              variant={filters.gpu.includes(gpu) ? 'filled' : 'outlined'}
-              onClick={() => {
-                if (filters.gpu.includes(gpu)) {
-                  handleFilterChange('gpu', filters.gpu.filter(g => g !== gpu));
-                } else {
-                  handleFilterChange('gpu', [...filters.gpu, gpu]);
                 }
               }}
             />
@@ -538,7 +557,7 @@ const ProductCategoryPage = () => {
       const brand = brands.find(b => b._id === brandId);
       if (brand) {
         activeFilters.push({
-          label: `Thương hiệu: ${brand.name}`,
+          label: `${brand.name}`,
           onDelete: () => handleFilterChange('brands', filters.brands.filter(id => id !== brandId))
         });
       }
@@ -560,32 +579,18 @@ const ProductCategoryPage = () => {
       });
     });
     
-    // Processor filters
-    filters.processor.forEach(cpu => {
-      activeFilters.push({
-        label: `CPU: ${cpu}`,
-        onDelete: () => handleFilterChange('processor', filters.processor.filter(p => p !== cpu))
-      });
-    });
-    
-    // GPU filters
-    filters.gpu.forEach(gpu => {
-      activeFilters.push({
-        label: `GPU: ${gpu}`,
-        onDelete: () => handleFilterChange('gpu', filters.gpu.filter(g => g !== gpu))
-      });
-    });
-    
     if (activeFilters.length === 0) return null;
     
     return (
-      <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+      <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
         {activeFilters.map((filter, index) => (
           <Chip
             key={index}
             label={filter.label}
             onDelete={filter.onDelete}
             size="small"
+            color="primary"
+            variant="outlined"
           />
         ))}
         
@@ -593,6 +598,7 @@ const ProductCategoryPage = () => {
           label="Xóa tất cả"
           color="error"
           size="small"
+          variant="outlined"
           onClick={() => {
             setFilters({
               category: categorySlug || '',
@@ -610,56 +616,39 @@ const ProductCategoryPage = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ my: 4 }}>
-      {/* Breadcrumbs */}
-      <Breadcrumbs sx={{ mb: 3 }}>
-        <Link color="inherit" href="/">
-          Trang chủ
-        </Link>
-        <Link color="inherit" href="/products">
-          Sản phẩm
-        </Link>
-        {category && (
-          <Typography color="text.primary">{category.name}</Typography>
-        )}
-      </Breadcrumbs>
-      
-      {/* Page Title */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          {category ? category.name : 'Tất cả sản phẩm'}
-        </Typography>
-        {category && category.description && (
-          <Typography variant="body1" color="text.secondary">
-            {category.description}
-          </Typography>
-        )}
-      </Box>
-      
-      {/* Main Content */}
-      <Grid container spacing={3}>
-        {/* Filters - Desktop */}
-        {!isMobile && (
-          <Grid item xs={12} md={3}>
-            <Paper 
-              elevation={0} 
-              variant="outlined" 
-              sx={{ p: 2, position: 'sticky', top: 20 }}
-            >
-              {renderFilters()}
-            </Paper>
-          </Grid>
-        )}
-        
-        {/* Products */}
-        <Grid item xs={12} md={!isMobile ? 9 : 12}>
+    <Box sx={{ width: '100%', overflow: 'hidden' }}>
+      {/* Header Section */}
+      <Box sx={{ backgroundColor: 'white', borderBottom: '1px solid #e0e0e0' }}>
+        <Container maxWidth="lg" sx={{ py: 2 }}>
+          {/* Breadcrumbs */}
+          <Breadcrumbs sx={{ mb: 2 }}>
+            <Link color="inherit" href="/" sx={{ textDecoration: 'none' }}>
+              Trang chủ
+            </Link>
+            <Link color="inherit" href="/products" sx={{ textDecoration: 'none' }}>
+              Sản phẩm
+            </Link>
+            {category && (
+              <Typography color="text.primary">{category.name}</Typography>
+            )}
+          </Breadcrumbs>
+          
+          {/* Page Title */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', color: '#333' }}>
+              {category ? category.name : 'Tất cả sản phẩm'}
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Hiển thị {products.length} / {pagination.total} sản phẩm
+            </Typography>
+          </Box>
+          
           {/* Control Bar */}
           <Box 
             sx={{ 
               display: 'flex', 
               justifyContent: 'space-between', 
-              alignItems: 'center', 
-              mb: 3,
+              alignItems: 'center',
               flexWrap: 'wrap',
               gap: 2
             }}
@@ -670,6 +659,7 @@ const ProductCategoryPage = () => {
                   variant="outlined" 
                   startIcon={<FilterIcon />}
                   onClick={() => setDrawerOpen(true)}
+                  size="small"
                 >
                   Bộ lọc
                 </Button>
@@ -690,86 +680,131 @@ const ProductCategoryPage = () => {
                   <MenuItem value="rating">Đánh giá cao nhất</MenuItem>
                 </Select>
               </FormControl>
-              
-              <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 1 }}>
-                <IconButton 
-                  color={view === 'grid' ? 'primary' : 'default'} 
-                  onClick={() => setView('grid')}
-                >
-                  <GridViewIcon />
-                </IconButton>
-                <IconButton 
-                  color={view === 'list' ? 'primary' : 'default'} 
-                  onClick={() => setView('list')}
-                >
-                  <ListViewIcon />
-                </IconButton>
-              </Box>
             </Box>
-            
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Hiển thị {products.length} / {pagination.total} sản phẩm
-            </Typography>
           </Box>
-          
-          {/* Active Filters */}
-          {renderActiveFilters()}
-          
-          {/* Products Grid/List */}
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-              <CircularProgress />
-            </Box>
-          ) : products.length === 0 ? (
-            <Box sx={{ textAlign: 'center', py: 10 }}>
-              <Typography variant="h6" gutterBottom>Không tìm thấy sản phẩm nào</Typography>
-              <Typography variant="body1" color="text.secondary">
-                Vui lòng thử lại với bộ lọc khác
+        </Container>
+      </Box>
+      
+      {/* Main Content */}
+      <Box sx={{ display: 'flex', width: '100%', position: 'relative' }}>
+        {/* Left sidebar - Filters (Desktop) */}
+        {!isMobile && (
+          <Box
+            sx={{
+              width: { xs: 0, md: '240px' }, 
+              flexShrink: 0,
+              display: { xs: 'none', md: 'block' },
+              position: 'relative',
+              backgroundColor: '#f8f9fa',
+              borderRight: '1px solid #e0e0e0'
+            }}
+          >
+            <Paper 
+              elevation={0} 
+              sx={{ 
+                p: 2, 
+                height: 'calc(100vh - 200px)',
+                overflowY: 'auto',
+                borderRadius: 0,
+                backgroundColor: 'transparent',
+                border: 'none',
+                m: 0,
+                position: 'sticky',
+                top: 0
+              }}
+            >
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 2, color: '#333' }}>
+                Bộ lọc tìm kiếm
               </Typography>
-            </Box>
-          ) : (
-            <>
-              {view === 'grid' ? (
-                <Grid container spacing={2}>
+              {renderFilters()}
+            </Paper>
+          </Box>
+        )}
+        
+        {/* Right - Products */}
+        <Box sx={{ 
+          flex: 1, 
+          minWidth: 0,
+          backgroundColor: '#fff'
+        }}>
+          <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 } }}>
+            <Box sx={{ py: 3 }}>
+              {/* Active Filters */}
+              {renderActiveFilters()}
+              
+              {/* Products Grid */}
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+                  <CircularProgress />
+                </Box>
+              ) : products.length === 0 ? (
+                <Paper sx={{ p: 8, textAlign: 'center', backgroundColor: 'white' }}>
+                  <Typography variant="h6" gutterBottom>Không tìm thấy sản phẩm nào</Typography>
+                  <Typography variant="body1" color="text.secondary">
+                    Vui lòng thử lại với bộ lọc khác
+                  </Typography>
+                </Paper>
+              ) : (
+                <Grid 
+                  container 
+                  spacing={1.5}
+                  className="product-grid-container"
+                  sx={{
+                    width: '100%',
+                    margin: 0,
+                    '& .MuiGrid-item': {
+                      display: 'flex',
+                      width: '100%'
+                    }
+                  }}
+                >
                   {products.map((product) => (
-                    <Grid item xs={12} sm={6} md={4} key={product._id}>
-                      <ProductCard 
-                        product={product} 
-                        onClick={() => handleProductClick(product._id)}
-                      />
+                    <Grid 
+                      item 
+                      xs={6}
+                      sm={4} 
+                      md={2.4}
+                      key={product._id}
+                      className="product-grid-item"
+                      sx={{
+                        display: 'flex',
+                        width: '100%',
+                        minHeight: '380px'
+                      }}
+                    >
+                      <ProductTracker product={product}>
+                        <Box className="product-card-wrapper">
+                          <ProductCardNew 
+                            product={product} 
+                            onClick={() => handleProductClick(product._id)}
+                          />
+                        </Box>
+                      </ProductTracker>
                     </Grid>
                   ))}
                 </Grid>
-              ) : (
-                <Box>
-                  {products.map((product) => (
-                    <ProductListItem 
-                      key={product._id} 
-                      product={product} 
-                      onClick={() => handleProductClick(product._id)}
+              )}
+              
+              {/* Pagination */}
+              {pagination.totalPages > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                  <Paper elevation={0} sx={{ p: 2, backgroundColor: 'white' }}>
+                    <Pagination 
+                      count={pagination.totalPages} 
+                      page={pagination.page}
+                      onChange={handlePageChange}
+                      color="primary"
+                      showFirstButton 
+                      showLastButton
+                      size={isMobile ? 'small' : 'medium'}
                     />
-                  ))}
+                  </Paper>
                 </Box>
               )}
-            </>
-          )}
-          
-          {/* Pagination */}
-          {pagination.totalPages > 1 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-              <Pagination 
-                count={pagination.totalPages} 
-                page={pagination.page}
-                onChange={handlePageChange}
-                color="primary"
-                showFirstButton 
-                showLastButton
-                size={isMobile ? 'small' : 'medium'}
-              />
             </Box>
-          )}
-        </Grid>
-      </Grid>
+          </Container>
+        </Box>
+      </Box>
       
       {/* Filters Drawer - Mobile */}
       <Drawer
@@ -779,7 +814,7 @@ const ProductCategoryPage = () => {
       >
         {renderFilters()}
       </Drawer>
-    </Container>
+    </Box>
   );
 };
 

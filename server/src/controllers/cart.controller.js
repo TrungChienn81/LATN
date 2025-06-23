@@ -4,17 +4,16 @@ const Product = require('../models/Product');
 const Shop = require('../models/Shop');
 const catchAsync = require('../utils/catchAsync');
 
-// --- Helper function để lấy hoặc tạo giỏ hàng ---
-const getOrCreateCart = async (userId) => {
-    let cart = await Cart.findOne({ userId });
-    if (!cart) {
-        cart = await Cart.create({ userId, items: [] });
-    }
-    return cart;
-};
-
 // Get user's cart
 exports.getCart = catchAsync(async (req, res) => {
+  // Ensure user is authenticated
+  if (!req.user || !req.user._id) {
+    return res.status(401).json({
+      success: false,
+      message: 'Cần đăng nhập để xem giỏ hàng'
+    });
+  }
+
   let cart = await Cart.findOne({ user: req.user._id })
     .populate({
       path: 'items.product',
@@ -38,6 +37,14 @@ exports.getCart = catchAsync(async (req, res) => {
 
 // Add item to cart
 exports.addToCart = catchAsync(async (req, res) => {
+  // Ensure user is authenticated
+  if (!req.user || !req.user._id) {
+    return res.status(401).json({
+      success: false,
+      message: 'Cần đăng nhập để thêm sản phẩm vào giỏ hàng'
+    });
+  }
+
   const { productId, quantity = 1 } = req.body;
 
   // Validate input

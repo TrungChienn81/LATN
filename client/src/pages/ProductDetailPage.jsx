@@ -30,6 +30,7 @@ import { formatPriceToVND } from '../utils/formatters';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import ProductReviews from '../components/ProductReviews';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -157,6 +158,28 @@ const ProductDetailPage = () => {
                   ({product.numReviews || 0} đánh giá)
                 </Typography>
               </Box>
+
+              {/* Shop Information */}
+              {product.shop && (
+                <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                      🏪 Cửa hàng:
+                    </Typography>
+                    <Typography variant="body1" color="primary">
+                      {product.shop.shopName}
+                    </Typography>
+                  </Box>
+                  {product.shop.rating && product.shop.rating > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Rating value={product.shop.rating} precision={0.1} readOnly size="small" />
+                      <Typography variant="caption" sx={{ ml: 1 }}>
+                        ({product.shop.rating.toFixed(1)})
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
               
               <Box sx={{ mb: 3 }}>
                 <Chip 
@@ -251,9 +274,6 @@ const ProductDetailPage = () => {
                     <Typography variant="body2" color="text.secondary">
                       / {product.stockQuantity} sản phẩm
                     </Typography>
-                  </Stack>
-                  
-                  <Stack direction="row" spacing={2}>
                     <Button
                       variant="contained"
                       size="large"
@@ -268,20 +288,21 @@ const ProductDetailPage = () => {
                         'Thêm vào giỏ hàng'
                       )}
                     </Button>
-                    {!isAuthenticated && (
-                      <Button
-                        variant="outlined"
-                        size="large"
-                        component={RouterLink}
-                        to="/login"
-                        sx={{ minWidth: 120 }}
-                      >
-                        Đăng nhập
-                      </Button>
-                    )}
                   </Stack>
                   
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  {!isAuthenticated && (
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      component={RouterLink}
+                      to="/login"
+                      sx={{ minWidth: 120, mb: 1 }}
+                    >
+                      Đăng nhập
+                    </Button>
+                  )}
+                  
+                  <Typography variant="body2" color="text.secondary">
                     Tạm tính: {formatPriceToVND(product.price * quantity)}
                   </Typography>
                 </Box>
@@ -320,6 +341,11 @@ const ProductDetailPage = () => {
               </Box>
             </Grid>
           </Grid>
+        </Paper>
+
+        {/* Product Reviews Section */}
+        <Paper sx={{ p: 3, mb: 4 }}>
+          <ProductReviews product={product} />
         </Paper>
 
         {/* Related Products */}

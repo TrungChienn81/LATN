@@ -164,7 +164,7 @@ orderSchema.pre('save', function(next) {
 
 // Indexes for better query performance
 orderSchema.index({ customer: 1, createdAt: -1 });
-orderSchema.index({ orderNumber: 1 });
+// orderNumber index already defined with unique: true in schema
 orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ 'shops.shop': 1 });
 
