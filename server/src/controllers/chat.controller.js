@@ -39,10 +39,10 @@ LỊCH SỬ CHAT: {chat_history}
 CÂU HỎI: {question}
 
 HƯỚNG DẪN:
-- Nếu hỏi về giá, trả lời chính xác theo dữ liệu (VD: "32.490.000đ")
+- Nếu hỏi về giá, trả lời chính xác theo dữ liệu đã được format (VD: "10.000.000đ")
 - Nếu hỏi sản phẩm cụ thể, tìm trong danh sách và mô tả chi tiết
 - Nếu không tìm thấy, thông báo "Không có sản phẩm này" và đề xuất sản phẩm tương tự
-- Trả lời ngắn gọn, chính xác, có giá cụ thể
+- Trả lời ngắn gọn, chính xác, sử dụng đúng định dạng giá đã được format sẵn trong danh sách
 
 TRẢ LỜI:
 `);
@@ -551,7 +551,8 @@ function formatProductContext(products) {
         const brandName = product.brand?.name || 'Không rõ thương hiệu';
         const categoryName = product.category?.name || 'Không rõ danh mục';
         const shopName = product.shopId?.shopName || 'Không rõ cửa hàng';
-        const price = product.price ? `${product.price.toLocaleString('vi-VN')}đ` : 'Liên hệ';
+        // Convert price from millions to VND and format properly
+        const price = product.price ? `${(product.price * 1000000).toLocaleString('vi-VN')}đ` : 'Liên hệ';
         const stock = product.stock || 0;
         
         return `${index + 1}. TÊN: ${product.name}
@@ -598,7 +599,8 @@ async function generateRAGResponse(question, context, chatHistory) {
         // Enhanced fallback response based on context
         if (context.length > 0) {
             const product = context[0];
-            const price = product.price ? `${product.price.toLocaleString('vi-VN')}đ` : 'Liên hệ';
+            // Convert price from millions to VND and format properly
+            const price = product.price ? `${(product.price * 1000000).toLocaleString('vi-VN')}đ` : 'Liên hệ';
             
             return `Tôi tìm thấy sản phẩm "${product.name}" của ${product.brand?.name || 'thương hiệu không rõ'} với giá ${price}. ${context.length > 1 ? `Và còn ${context.length - 1} sản phẩm khác.` : ''} Bạn có muốn biết thêm chi tiết không?`;
         } else {

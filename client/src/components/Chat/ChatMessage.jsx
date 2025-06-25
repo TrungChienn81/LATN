@@ -68,7 +68,7 @@ const ChatMessage = ({ message, isBot = false, timestamp, contextProducts = [], 
                 {contextProducts.slice(0, 3).map((product, index) => (
                   <Chip
                     key={index}
-                    label={`${product.name} - ${product.price?.toLocaleString('vi-VN')}đ`}
+                    label={`${product.name} - ${product.price ? (product.price * 1000000).toLocaleString('vi-VN') : 'Liên hệ'}đ`}
                     size="small"
                     variant="outlined"
                     sx={{ fontSize: '0.7rem' }}
