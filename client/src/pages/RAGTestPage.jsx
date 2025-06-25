@@ -24,6 +24,7 @@ import {
 } from '@mui/icons-material';
 import ChatWindow from '../components/Chat/ChatWindow';
 import api from '../services/api';
+import { formatPriceToVND } from '../utils/formatters';
 
 const RAGTestPage = () => {
   const [chatOpen, setChatOpen] = useState(false);
@@ -34,13 +35,10 @@ const RAGTestPage = () => {
   const [products, setProducts] = useState([]);
   const [costStats, setCostStats] = useState(null);
 
-  // Format price function
+  // Use formatPriceToVND from utils
   const formatPrice = (price) => {
     if (!price) return 'N/A';
-    console.log('Formatting price:', price, typeof price);
-    // Ensure price is a number
-    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
-    return new Intl.NumberFormat('vi-VN').format(numPrice) + 'đ';
+    return formatPriceToVND(price);
   };
 
   // Predefined test queries
