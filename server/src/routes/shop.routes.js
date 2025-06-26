@@ -44,7 +44,18 @@ router.post(
     shopController.createShopProduct
 );
 
-// Cập nhật shop của mình
+// Cập nhật shop của mình (dùng my-shop thay vì id)
+router.put(
+    '/my-shop',
+    protect,
+    upload.fields([
+        { name: 'logo', maxCount: 1 },
+        { name: 'banner', maxCount: 1 }
+    ]),
+    shopController.updateMyShop
+);
+
+// Cập nhật shop theo ID (cho admin)
 router.put(
     '/:id',
     protect,

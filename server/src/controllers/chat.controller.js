@@ -39,10 +39,10 @@ LỊCH SỬ CHAT: {chat_history}
 CÂU HỎI: {question}
 
 HƯỚNG DẪN:
-- Nếu hỏi về giá, trả lời chính xác theo dữ liệu đã được format (VD: "10.000.000đ")
+- Nếu hỏi về giá, trả lời chính xác theo dữ liệu (VD: "32.490.000đ")
 - Nếu hỏi sản phẩm cụ thể, tìm trong danh sách và mô tả chi tiết
 - Nếu không tìm thấy, thông báo "Không có sản phẩm này" và đề xuất sản phẩm tương tự
-- Trả lời ngắn gọn, chính xác, sử dụng đúng định dạng giá đã được format sẵn trong danh sách
+- Trả lời ngắn gọn, chính xác, có giá cụ thể
 
 TRẢ LỜI:
 `);
@@ -548,10 +548,21 @@ function formatProductContext(products) {
     }
     
     return products.map((product, index) => {
-        const brandName = product.brand?.name || 'Không rõ thương hiệu';
+        // Smart brand name extraction
+        let brandName = product.brand?.name;
+        
+        // If no brand from database, extract from product name
+        if (!brandName && product.name) {
+            brandName = extractBrandFromProductName(product.name);
+        }
+        
+        // Final fallback
+        if (!brandName) {
+            brandName = 'Chưa xác định thương hiệu';
+        }
+        
         const categoryName = product.category?.name || 'Không rõ danh mục';
         const shopName = product.shopId?.shopName || 'Không rõ cửa hàng';
-        // Convert price from millions to VND and format properly
         const price = product.price ? `${(product.price * 1000000).toLocaleString('vi-VN')}đ` : 'Liên hệ';
         const stock = product.stock || 0;
         
@@ -564,6 +575,43 @@ function formatProductContext(products) {
    MÔ TẢ: ${product.description || 'Không có mô tả'}
    ---`;
     }).join('\n');
+}
+
+// Extract brand from product name as fallback
+function extractBrandFromProductName(productName) {
+    if (!productName) return null;
+    
+    const knownBrands = [
+        'MSI', 'ASUS', 'Dell', 'HP', 'Lenovo', 'Acer', 'Apple', 'Samsung', 'LG', 
+        'Gigabyte', 'Intel', 'AMD', 'NVIDIA', 'Corsair', 'Kingston', 'Crucial',
+        'Western Digital', 'Seagate', 'Logitech', 'Razer', 'SteelSeries', 'HyperX',
+        'Cooler Master', 'Thermaltake', 'ASRock', 'EVGA', 'Zotac', 'ViewSonic',
+        'BenQ', 'Philips', 'AOC', 'Alienware'
+    ];
+    
+    // Convert to words and check each word
+    const words = productName.split(/\s+/);
+    
+    for (const word of words) {
+        // Check for exact brand match (case insensitive)
+        const matchedBrand = knownBrands.find(brand => 
+            word.toLowerCase() === brand.toLowerCase()
+        );
+        
+        if (matchedBrand) {
+            return matchedBrand.toUpperCase();
+        }
+    }
+    
+    // Fallback: if first word looks like a brand (capitalized, 2+ chars)
+    if (words.length > 0) {
+        const firstWord = words[0];
+        if (firstWord.length >= 2 && /^[A-Za-z]+$/.test(firstWord)) {
+            return firstWord.toUpperCase();
+        }
+    }
+    
+    return null;
 }
 
 async function generateRAGResponse(question, context, chatHistory) {
@@ -599,10 +647,16 @@ async function generateRAGResponse(question, context, chatHistory) {
         // Enhanced fallback response based on context
         if (context.length > 0) {
             const product = context[0];
-            // Convert price from millions to VND and format properly
             const price = product.price ? `${(product.price * 1000000).toLocaleString('vi-VN')}đ` : 'Liên hệ';
             
-            return `Tôi tìm thấy sản phẩm "${product.name}" của ${product.brand?.name || 'thương hiệu không rõ'} với giá ${price}. ${context.length > 1 ? `Và còn ${context.length - 1} sản phẩm khác.` : ''} Bạn có muốn biết thêm chi tiết không?`;
+            // Smart brand extraction for fallback
+            let brandName = product.brand?.name;
+            if (!brandName && product.name) {
+                brandName = extractBrandFromProductName(product.name);
+            }
+            const brandText = brandName || 'thương hiệu không rõ';
+            
+            return `Tôi tìm thấy sản phẩm "${product.name}" của ${brandText} với giá ${price}. ${context.length > 1 ? `Và còn ${context.length - 1} sản phẩm khác.` : ''} Bạn có muốn biết thêm chi tiết không?`;
         } else {
             return 'Xin lỗi, tôi không tìm thấy sản phẩm nào phù hợp trong cơ sở dữ liệu. Bạn có thể thử tìm kiếm với từ khóa khác hoặc cho tôi biết thêm về nhu cầu của bạn?';
         }

@@ -20,7 +20,9 @@ import {
   Search as SearchIcon,
   Psychology as AIIcon,
   Storage as DatabaseIcon,
-  CheckCircle as CheckIcon
+  CheckCircle as CheckIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import ChatWindow from '../components/Chat/ChatWindow';
 import api from '../services/api';
@@ -34,6 +36,8 @@ const RAGTestPage = () => {
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState([]);
   const [costStats, setCostStats] = useState(null);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [queryHistory, setQueryHistory] = useState([]);
 
   // Use formatPriceToVND from utils
   const formatPrice = (price) => {
@@ -41,19 +45,70 @@ const RAGTestPage = () => {
     return formatPriceToVND(price);
   };
 
-  // Predefined test queries
-  const testQueries = [
-    "Laptop MSI Alpha 15 B5EEK 203VN giá bao nhiêu",
-    "ASUS TUF Gaming F15 FX506HF",
-    "Dell Inspiron 15 3520 có còn hàng không",
-    "MSI Gaming GF63 Thin",
-    "ASUS VivoBook 15 X1502ZA",
-    "Laptop gaming dưới 20 triệu",
-    "Laptop văn phòng giá rẻ",
-    "So sánh MSI và ASUS",
-    "B5EEK 203VN",
-    "Alpha 15"
-  ];
+  // Extract brand from product name if brand is not populated
+  const extractBrandFromName = (productName) => {
+    if (!productName) return null;
+    
+    const nameParts = productName.split(' ');
+    const knownBrands = ['MSI', 'Acer', 'ASUS', 'Dell', 'HP', 'Lenovo', 'Apple', 'Samsung', 'LG', 'Gigabyte', 'Intel', 'AMD'];
+    
+    // Tìm brand trong tên sản phẩm
+    for (const part of nameParts) {
+      if (knownBrands.some(brand => part.toLowerCase() === brand.toLowerCase())) {
+        return part.toUpperCase();
+      }
+    }
+    
+    // Fallback: lấy từ đầu tiên có thể là brand
+    if (nameParts.length > 0 && nameParts[0].length > 2) {
+      return nameParts[0];
+    }
+    
+    return null;
+  };
+
+  // Get secondary info for product display
+  const getSecondaryInfo = (product) => {
+    const price = formatPrice(product.price);
+    const brand = product.brand?.name || extractBrandFromName(product.name) || 'Chưa xác định';
+    const category = product.category?.name || '';
+    
+    return category ? `${price} • ${brand} • ${category}` : `${price} • ${brand}`;
+  };
+
+  // Load query history from localStorage
+  const loadQueryHistory = () => {
+    try {
+      const saved = localStorage.getItem('rag_query_history');
+      if (saved) {
+        const history = JSON.parse(saved);
+        setQueryHistory(history);
+      }
+    } catch (error) {
+      console.error('Error loading query history:', error);
+    }
+  };
+
+  // Save query to history
+  const saveQueryToHistory = (query) => {
+    try {
+      const newHistory = [
+        { query, timestamp: new Date().toISOString() },
+        ...queryHistory.filter(item => item.query !== query) // Remove duplicate
+      ].slice(0, 10); // Keep only last 10 queries
+      
+      setQueryHistory(newHistory);
+      localStorage.setItem('rag_query_history', JSON.stringify(newHistory));
+    } catch (error) {
+      console.error('Error saving query history:', error);
+    }
+  };
+
+  // Clear query history
+  const clearQueryHistory = () => {
+    setQueryHistory([]);
+    localStorage.removeItem('rag_query_history');
+  };
 
   // Load products from database
   const loadProducts = async () => {
@@ -83,6 +138,9 @@ const RAGTestPage = () => {
   const runTestQuery = async (query) => {
     setLoading(true);
     setTestQuery(query);
+    
+    // Save to history
+    saveQueryToHistory(query);
     
     try {
       // Create chat session
@@ -144,6 +202,7 @@ const RAGTestPage = () => {
     clearAuthTokens(); // Clear tokens first
     loadProducts();
     loadCostStats();
+    loadQueryHistory();
   }, []);
 
   return (
@@ -178,23 +237,56 @@ const RAGTestPage = () => {
                 Có {products.length} sản phẩm trong database
               </Typography>
               
-              <List dense>
-                {products.slice(0, 5).map((product, index) => (
-                  <ListItem key={index} sx={{ py: 0.5 }}>
-                    <ListItemText
-                      primary={product.name}
-                      secondary={`${formatPrice(product.price)} - ${product.brand?.name || 'N/A'}`}
-                      primaryTypographyProps={{ fontSize: '0.9rem' }}
-                      secondaryTypographyProps={{ fontSize: '0.8rem' }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
+              <Box sx={{ 
+                maxHeight: showAllProducts ? 400 : 'none', 
+                overflowY: showAllProducts ? 'auto' : 'visible',
+                border: showAllProducts ? '1px solid #e0e0e0' : 'none',
+                borderRadius: showAllProducts ? 1 : 0,
+                mt: showAllProducts ? 1 : 0
+              }}>
+                <List dense>
+                  {(showAllProducts ? products : products.slice(0, 5)).map((product, index) => (
+                    <ListItem key={index} sx={{ py: 0.5 }}>
+                      <ListItemText
+                        primary={product.name}
+                        secondary={getSecondaryInfo(product)}
+                        primaryTypographyProps={{ fontSize: '0.9rem' }}
+                        secondaryTypographyProps={{ fontSize: '0.8rem' }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
               
               {products.length > 5 && (
-                <Typography variant="caption" color="text.secondary">
-                  ... và {products.length - 5} sản phẩm khác
-                </Typography>
+                <Box sx={{ mt: 1, textAlign: 'center' }}>
+                  {!showAllProducts ? (
+                    <>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                        ... và {products.length - 5} sản phẩm khác
+                      </Typography>
+                      <Button 
+                        size="small" 
+                        variant="outlined" 
+                        onClick={() => setShowAllProducts(true)}
+                        startIcon={<ExpandMoreIcon />}
+                        sx={{ fontSize: '0.7rem' }}
+                      >
+                        Xem tất cả {products.length} sản phẩm
+                      </Button>
+                    </>
+                  ) : (
+                    <Button 
+                      size="small" 
+                      variant="outlined" 
+                      onClick={() => setShowAllProducts(false)}
+                      startIcon={<ExpandLessIcon />}
+                      sx={{ fontSize: '0.7rem' }}
+                    >
+                      Thu gọn danh sách
+                    </Button>
+                  )}
+                </Box>
               )}
             </CardContent>
           </Card>
@@ -228,21 +320,47 @@ const RAGTestPage = () => {
                 </Button>
               </Box>
 
-              {/* Predefined Queries */}
-              <Typography variant="subtitle2" gutterBottom>
-                Hoặc chọn câu hỏi test có sẵn:
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3 }}>
-                {testQueries.map((query, index) => (
-                  <Chip
-                    key={index}
-                    label={query}
-                    size="small"
-                    onClick={() => runTestQuery(query)}
-                    disabled={loading}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                ))}
+              {/* Query History */}
+              <Box sx={{ mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="subtitle2">
+                    Lịch sử câu hỏi đã test:
+                  </Typography>
+                  {queryHistory.length > 0 && (
+                    <Button 
+                      size="small" 
+                      onClick={clearQueryHistory}
+                      sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+                    >
+                      Xóa lịch sử
+                    </Button>
+                  )}
+                </Box>
+                
+                {queryHistory.length > 0 ? (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {queryHistory.map((historyItem, index) => (
+                      <Chip
+                        key={index}
+                        label={historyItem.query}
+                        size="small"
+                        onClick={() => runTestQuery(historyItem.query)}
+                        disabled={loading}
+                        sx={{ 
+                          cursor: 'pointer',
+                          '&:hover': {
+                            backgroundColor: 'primary.light',
+                            color: 'white'
+                          }
+                        }}
+                      />
+                    ))}
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    Chưa có câu hỏi nào được test. Hãy nhập câu hỏi ở trên để bắt đầu!
+                  </Typography>
+                )}
               </Box>
 
               {/* Test Results */}

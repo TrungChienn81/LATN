@@ -5,21 +5,7 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-
-// Hàm để tìm cổng trống nếu cổng mặc định đã bị sử dụng
-const findAvailablePort = (startPort) => {
-    return new Promise((resolve) => {
-        const server = require('http').createServer();
-        server.listen(startPort, () => {
-            const port = server.address().port;
-            server.close(() => resolve(port));
-        });
-        server.on('error', () => {
-            resolve(findAvailablePort(startPort + 1));
-        });
-    });
-};
+const PORT = process.env.PORT || 3001; // Sử dụng port 3001 cố định
 
 // Middleware cơ bản
 app.use(cors()); // Cho phép truy cập từ tên miền khác (frontend)
@@ -83,14 +69,7 @@ mongoose.connect('mongodb+srv://TrungChienn:Chien2004@latn.af6hwio.mongodb.net/L
     // app.use('/api/chat', mockChatRoutes); // Mock AI - DISABLED 
     app.use('/api/chat', chatRoutes); // Real OpenAI API - ENABLED 🚀
     
-    // Khởi động server với cổng tự động tìm nếu cổng mặc định bị sử dụng
-    (async () => {
-        try {
-            const availablePort = await findAvailablePort(PORT);
-            app.listen(availablePort, () => {
-                console.log(`Server is running on port ${availablePort}`);
-            });
-        } catch (error) {
-            console.error('Failed to start server:', error);
-        }
-    })();
+    // Khởi động server trên port 3001 cố định
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });

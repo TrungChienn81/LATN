@@ -286,7 +286,76 @@ exports.getShopByIdWithStats = async (req, res) => {
   }
 };
 
-// Cập nhật thông tin shop
+// Cập nhật shop của mình (dùng userId để tìm shop)
+exports.updateMyShop = async (req, res) => {
+  try {
+    const { shopName, description, contactPhone, contactEmail, address } = req.body;
+    const userId = req.user._id;
+    
+    // Tìm shop của user
+    const shop = await Shop.findOne({ ownerId: userId });
+    if (!shop) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bạn chưa có shop nào'
+      });
+    }
+    
+    // Nếu có cập nhật tên shop, kiểm tra xem tên đã tồn tại chưa
+    if (shopName && shopName !== shop.shopName) {
+      const shopNameExists = await Shop.findOne({ 
+        shopName, 
+        _id: { $ne: shop._id } // Loại trừ shop hiện tại
+      });
+      
+      if (shopNameExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tên shop đã tồn tại, vui lòng chọn tên khác'
+        });
+      }
+    }
+    
+    // Xử lý ảnh mới nếu có
+    const updateData = {
+      shopName,
+      description,
+      contactPhone,
+      contactEmail,
+      address
+    };
+    
+    if (req.files) {
+      if (req.files.logo) {
+        updateData.logoUrl = `/uploads/${req.files.logo[0].filename}`;
+      }
+      if (req.files.banner) {
+        updateData.bannerUrl = `/uploads/${req.files.banner[0].filename}`;
+      }
+    }
+    
+    // Cập nhật shop
+    const updatedShop = await Shop.findByIdAndUpdate(
+      shop._id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+    
+    res.status(200).json({
+      success: true,
+      message: 'Cập nhật shop thành công',
+      data: updatedShop
+    });
+  } catch (error) {
+    console.error('Error in updateMyShop:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi khi cập nhật shop'
+    });
+  }
+};
+
+// Cập nhật thông tin shop (dùng cho admin)
 exports.updateShop = async (req, res) => {
   try {
     const { shopName, description, contactPhone, contactEmail, address } = req.body;
