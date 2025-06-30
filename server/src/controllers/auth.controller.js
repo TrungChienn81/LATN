@@ -67,6 +67,9 @@ exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
+        console.log('🔍 Login attempt for email:', email);
+        console.log('🔍 Password provided:', password ? 'YES' : 'NO');
+
         if (!email || !password) {
             return res.status(400).json({ 
                 success: false, 
@@ -75,13 +78,30 @@ exports.login = async (req, res) => {
         }
 
         const user = await User.findOne({ email }).select('+password');
-
-        if (!user || !(await bcrypt.compare(password, user.password))) {
+        console.log('🔍 User found:', user ? 'YES' : 'NO');
+        
+        if (!user) {
+            console.log('❌ User not found with email:', email);
             return res.status(401).json({ 
                 success: false, 
                 message: 'Email hoặc mật khẩu không đúng.' 
             });
         }
+
+        console.log('🔍 Stored password hash:', user.password ? 'EXISTS' : 'MISSING');
+        
+        const passwordMatch = await bcrypt.compare(password, user.password);
+        console.log('🔍 Password comparison result:', passwordMatch);
+
+        if (!passwordMatch) {
+            console.log('❌ Password does not match for user:', email);
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Email hoặc mật khẩu không đúng.' 
+            });
+        }
+
+        console.log('✅ Login successful for user:', email);
 
         const payload = {
             id: user._id,

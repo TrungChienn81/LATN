@@ -26,7 +26,8 @@ const userSchema = new Schema({
     },
     password: {
         type: String,
-        required: true
+        required: true,
+        select: false // Hide password from queries by default
         // Nhớ hash mật khẩu trước khi lưu
     },
     role: {
@@ -36,16 +37,16 @@ const userSchema = new Schema({
     },
     name: {
         type: String,
-        required: true,
+        required: false,
         trim: true
     },
     firstName: {
         type: String,
-        // required: true // Xem xét có bắt buộc không
+        required: true
     },
     lastName: {
         type: String,
-        // required: true // Xem xét có bắt buộc không
+        required: true
     },
     avatarUrl: {
         type: String,

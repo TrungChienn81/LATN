@@ -344,94 +344,112 @@ async function getRelevantContext(query) {
         console.log('🎯 Extracted keywords:', keywords);
         console.log('🏷️ Product identifiers:', productIdentifiers);
         
-        let searchQueries = [];
+        let allProducts = [];
         
-        // 1. Exact product name/model search (highest priority)
-        if (productIdentifiers.length > 0) {
-            for (const identifier of productIdentifiers) {
-                searchQueries.push({
-                    $or: [
-                        { name: new RegExp(identifier, 'i') },
-                        { description: new RegExp(identifier, 'i') },
-                        { sku: new RegExp(identifier, 'i') }
-                    ]
-                });
-            }
-        }
-        
-        // 2. Brand + model combination search
-        const brandModelCombos = extractBrandModelCombos(query);
-        for (const combo of brandModelCombos) {
-            const brand = await Brand.findOne({ 
-                name: new RegExp(combo.brand, 'i') 
-            });
+        // PRIORITY 1: Exact model code search (96HG, 99Y8, etc.)
+        const modelCodes = productIdentifiers.filter(id => /^[A-Z0-9]{4}$/.test(id));
+        for (const code of modelCodes) {
+            console.log(`🎯 Searching for exact model code: ${code}`);
+            const exactMatches = await Product.find({
+                name: new RegExp(`\\b${code}\\b`, 'i') // Word boundary for exact match
+            })
+            .populate('category', 'name')
+            .populate('brand', 'name')
+            .populate('shopId', 'shopName');
             
-            if (brand) {
-                searchQueries.push({
-                    brand: brand._id,
-                    $or: [
-                        { name: new RegExp(combo.model, 'i') },
-                        { description: new RegExp(combo.model, 'i') }
-                    ]
-                });
+            if (exactMatches.length > 0) {
+                console.log(`✅ Found ${exactMatches.length} exact model code matches for: ${code}`);
+                // Score exact matches highest
+                const scoredMatches = exactMatches.map(p => ({
+                    ...p.toObject(),
+                    _matchScore: 100, // Highest priority
+                    _matchReason: `Exact model code: ${code}`
+                }));
+                allProducts.push(...scoredMatches);
             }
         }
         
-        // 3. General keyword search
-        if (keywords.length > 0) {
-            const keywordRegex = keywords.map(k => new RegExp(k, 'i'));
-            searchQueries.push({
-                $or: [
-                    { name: { $in: keywordRegex } },
-                    { description: { $in: keywordRegex } }
-                ]
-            });
-        }
-        
-        // 4. Category search
-        const categories = await Category.find({
-            name: { $in: keywords.map(k => new RegExp(k, 'i')) }
-        });
-        if (categories.length > 0) {
-            searchQueries.push({
-                category: { $in: categories.map(c => c._id) }
-            });
-        }
-        
-        // Execute searches in priority order
-        let products = [];
-        for (const searchQuery of searchQueries) {
-            const found = await Product.find(searchQuery)
-                .populate('category', 'name')
-                .populate('brand', 'name')
-                .populate('shopId', 'shopName')
-                .limit(10);
-            
-            if (found.length > 0) {
-                products = [...products, ...found];
-                console.log(`✅ Found ${found.length} products with query:`, JSON.stringify(searchQuery, null, 2));
-                break; // Use first successful search
-            }
-        }
-        
-        // Remove duplicates
-        const uniqueProducts = products.filter((product, index, self) =>
-            index === self.findIndex(p => p._id.toString() === product._id.toString())
+        // PRIORITY 2: Full product name search with model codes
+        const fullProductNames = productIdentifiers.filter(id => 
+            id.includes('Acer Predator') || id.includes('PHN14')
         );
-        
-        // If no specific products found, return trending
-        if (uniqueProducts.length === 0) {
-            console.log('🔄 No specific matches, returning trending products');
-            return await Product.find({})
-                .populate('category', 'name')
-                .populate('brand', 'name')
-                .populate('shopId', 'shopName')
-                .sort({ createdAt: -1 })
-                .limit(5);
+        for (const productName of fullProductNames) {
+            console.log(`🎯 Searching for full product name: ${productName}`);
+            const nameMatches = await Product.find({
+                name: new RegExp(productName.replace(/\s+/g, '\\s+'), 'i')
+            })
+            .populate('category', 'name')
+            .populate('brand', 'name')
+            .populate('shopId', 'shopName');
+            
+            if (nameMatches.length > 0) {
+                console.log(`✅ Found ${nameMatches.length} full name matches`);
+                const scoredMatches = nameMatches.map(p => ({
+                    ...p.toObject(),
+                    _matchScore: 90, // Second highest priority
+                    _matchReason: `Full product name: ${productName}`
+                }));
+                allProducts.push(...scoredMatches);
+            }
         }
         
-        console.log(`🎉 RAG found ${uniqueProducts.length} relevant products`);
-        return uniqueProducts.slice(0, 5);
+        // PRIORITY 3: General identifier search
+        const otherIdentifiers = productIdentifiers.filter(id => 
+            !modelCodes.includes(id) && !fullProductNames.includes(id)
+        );
+        for (const identifier of otherIdentifiers) {
+            const generalMatches = await Product.find({
+                $or: [
+                    { name: new RegExp(identifier, 'i') },
+                    { description: new RegExp(identifier, 'i') }
+                ]
+            })
+            .populate('category', 'name')
+            .populate('brand', 'name')
+            .populate('shopId', 'shopName')
+            .limit(5);
+            
+            if (generalMatches.length > 0) {
+                const scoredMatches = generalMatches.map(p => ({
+                    ...p.toObject(),
+                    _matchScore: 70, // Lower priority
+                    _matchReason: `General match: ${identifier}`
+                }));
+                allProducts.push(...scoredMatches);
+            }
+        }
+        
+        // Remove duplicates and sort by match score
+        const uniqueProducts = [];
+        const seenIds = new Set();
+        
+        for (const product of allProducts) {
+            const productId = product._id.toString();
+            if (!seenIds.has(productId)) {
+                seenIds.add(productId);
+                uniqueProducts.push(product);
+            }
+        }
+        
+        // Sort by match score (highest first)
+        uniqueProducts.sort((a, b) => (b._matchScore || 0) - (a._matchScore || 0));
+        
+        if (uniqueProducts.length > 0) {
+            console.log(`🎉 RAG found ${uniqueProducts.length} relevant products:`);
+            uniqueProducts.slice(0, 3).forEach(p => {
+                console.log(`  - ${p.name} (Score: ${p._matchScore}, Reason: ${p._matchReason})`);
+            });
+            return uniqueProducts.slice(0, 5);
+        }
+        
+        // Fallback: If no specific products found, return trending
+        console.log('🔄 No specific matches, returning trending products');
+        return await Product.find({})
+            .populate('category', 'name')
+            .populate('brand', 'name')
+            .populate('shopId', 'shopName')
+            .sort({ createdAt: -1 })
+            .limit(5);
 
     } catch (error) {
         console.error('Error getting relevant context:', error);
@@ -443,6 +461,22 @@ async function getRelevantContext(query) {
 function extractProductIdentifiers(query) {
     const identifiers = [];
     
+    // Pattern for Acer Predator specific models (PRIORITY)
+    const acerPredatorPattern = /(Laptop\s+gaming\s+Acer\s+Predator\s+Helios\s+Neo\s+14\s+PHN14\s+51\s+[A-Z0-9]+)/gi;
+    const acerPredator = query.match(acerPredatorPattern);
+    if (acerPredator) {
+        identifiers.push(...acerPredator);
+        console.log('🎯 Found exact Acer Predator model:', acerPredator);
+    }
+    
+    // Pattern for specific end codes (96HG, 99Y8, etc.) - HIGH PRIORITY
+    const endCodePattern = /\b([A-Z0-9]{4})\b(?=\s|$)/g;
+    const endCodes = query.match(endCodePattern);
+    if (endCodes) {
+        identifiers.push(...endCodes);
+        console.log('🎯 Found specific model codes:', endCodes);
+    }
+    
     // Pattern for exact product names: "MSI Alpha 15 B5EEK 203VN"
     const fullNamePattern = /(MSI\s+Alpha\s+15\s+B5EEK\s+203VN)/gi;
     const fullName = query.match(fullNamePattern);
@@ -451,21 +485,22 @@ function extractProductIdentifiers(query) {
     }
     
     // Pattern for brand + series: "MSI Alpha 15"
-    const brandSeriesPattern = /(MSI\s+Alpha\s+15)|(ASUS\s+TUF\s+Gaming)|(Dell\s+Inspiron)/gi;
+    const brandSeriesPattern = /(MSI\s+Alpha\s+15)|(ASUS\s+TUF\s+Gaming)|(Dell\s+Inspiron)|(Acer\s+Predator\s+Helios\s+Neo\s+14)/gi;
     const brandSeries = query.match(brandSeriesPattern);
     if (brandSeries) {
         identifiers.push(...brandSeries);
     }
     
-    // Pattern for specific model codes: B5EEK, 203VN, etc.
-    const modelCodePattern = /\b[A-Z0-9]{4,}\b/g;
-    const codes = query.match(modelCodePattern);
-    if (codes) {
-        identifiers.push(...codes);
+    // Pattern for PHN14 series specifically
+    const phn14Pattern = /(PHN14\s+51\s+[A-Z0-9]+)/gi;
+    const phn14 = query.match(phn14Pattern);
+    if (phn14) {
+        identifiers.push(...phn14);
+        console.log('🎯 Found PHN14 series:', phn14);
     }
     
     // Pattern for common laptop names
-    const laptopPattern = /(Alpha\s+15|TUF\s+Gaming|Inspiron\s+15|GF63\s+Thin|VivoBook\s+15)/gi;
+    const laptopPattern = /(Alpha\s+15|TUF\s+Gaming|Inspiron\s+15|GF63\s+Thin|VivoBook\s+15|Predator\s+Helios\s+Neo)/gi;
     const laptopNames = query.match(laptopPattern);
     if (laptopNames) {
         identifiers.push(...laptopNames);

@@ -186,6 +186,8 @@ exports.createProduct = async (req, res) => {
 // Lấy tất cả sản phẩm, có hỗ trợ lọc và phân trang
 exports.getAllProducts = async (req, res, next) => {
   try {
+    console.log('🔍 getAllProducts called with query params:', req.query);
+    
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
@@ -194,6 +196,8 @@ exports.getAllProducts = async (req, res, next) => {
     const queryObj = { ...req.query };
     const excludedFields = ['page', 'sort', 'limit', 'fields', 'categoryName'];
     excludedFields.forEach(el => delete queryObj[el]);
+    
+    console.log('🔍 Query object after filtering:', queryObj);
     
     // Xử lý filter đặc biệt cho shopId
     if (queryObj.shopId) {
@@ -216,12 +220,10 @@ exports.getAllProducts = async (req, res, next) => {
     let queryStr = JSON.stringify(queryObj);
     queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, match => `$${match}`);
     
-    // Tạo query cơ bản
+    // Tạo query cơ bản với populate
     let query = Product.find(JSON.parse(queryStr))
       .skip(skip)
       .limit(limit)
-      .populate('category', 'name slug')
-      .populate('brand', 'name slug')
       .populate('shopId', 'shopName ownerId status rating');
     
     // Xử lý filter theo tên category (cho gaming hoặc category khác)
@@ -249,21 +251,101 @@ exports.getAllProducts = async (req, res, next) => {
       }
     }
     
-    // Sắp xếp
+    // Sắp xếp với mapping đúng field names
     if (req.query.sort) {
-      const sortBy = req.query.sort.split(',').join(' ');
+      let sortBy = req.query.sort;
+      
+      // Map frontend sort values to actual database fields
+      switch (sortBy) {
+        case 'newest':
+          sortBy = '-createdAt'; // Newest first
+          break;
+        case 'oldest':
+          sortBy = 'createdAt'; // Oldest first
+          break;
+        case 'popular':
+          sortBy = '-averageRating -reviewCount'; // Popular (highest rating, most reviews)
+          break;
+        case 'price-low':
+          sortBy = 'price'; // Price ascending
+          break;
+        case 'price-high':
+          sortBy = '-price'; // Price descending
+          break;
+        case 'discount':
+          sortBy = '-originalPrice'; // Highest original price (likely more discount)
+          break;
+        case 'name':
+          sortBy = 'name'; // Alphabetical
+          break;
+        default:
+          // If it's already a valid MongoDB sort format, use as-is
+          sortBy = sortBy.split(',').join(' ');
+      }
+      
+      console.log(`🔍 Sorting by: ${req.query.sort} → ${sortBy}`);
       query = query.sort(sortBy);
     } else {
-      query = query.sort('-createdAt');
+      query = query.sort('-createdAt'); // Default: newest first
     }
     
-    // Thực thi query
-    const products = await query;
+    // Thực thi query với error handling cho populate
+    console.log('🔍 About to execute query with final filters');
+    let products;
+    try {
+      products = await query;
+      console.log(`🔍 Query returned ${products.length} products`);
+    } catch (populateError) {
+      console.log('❌ Populate error, retrying without populate:', populateError.message);
+      // Retry without populate if it fails
+      query = Product.find(JSON.parse(queryStr)).skip(skip).limit(limit);
+      if (req.query.sort) {
+        let sortBy = req.query.sort;
+        switch (sortBy) {
+          case 'newest': sortBy = '-createdAt'; break;
+          case 'oldest': sortBy = 'createdAt'; break;
+          case 'popular': sortBy = '-averageRating -reviewCount'; break;
+          case 'price-low': sortBy = 'price'; break;
+          case 'price-high': sortBy = '-price'; break;
+          case 'discount': sortBy = '-originalPrice'; break;
+          case 'name': sortBy = 'name'; break;
+          default: sortBy = sortBy.split(',').join(' ');
+        }
+        query = query.sort(sortBy);
+      } else {
+        query = query.sort('-createdAt');
+      }
+      products = await query;
+      console.log(`🔍 Retry query returned ${products.length} products`);
+    }
     
     // Map products để có trường shop thay vì shopId
     const formattedProducts = products.map(product => {
       const productObj = product.toObject();
-      productObj.shop = productObj.shopId; // Copy shopId data to shop field
+      
+      // Handle shop information
+      if (productObj.shopId) {
+        if (typeof productObj.shopId === 'object' && productObj.shopId.shopName) {
+          // Shop was populated successfully
+          productObj.shop = productObj.shopId;
+          productObj.shopName = productObj.shopId.shopName;
+        } else {
+          // Shop wasn't populated, create fallback
+          productObj.shop = {
+            _id: productObj.shopId,
+            shopName: 'Shop LATN',  // Default shop name
+            status: 'active'
+          };
+          productObj.shopName = 'Shop LATN';
+        }
+      } else {
+        // No shopId at all
+        productObj.shop = {
+          shopName: 'Shop không xác định',
+          status: 'unknown'
+        };
+        productObj.shopName = 'Shop không xác định';
+      }
       
       // Add brandName for easier frontend access
       if (productObj.brand && typeof productObj.brand === 'object' && productObj.brand.name) {

@@ -1,4 +1,18 @@
-require('dotenv').config(); // Nạp biến môi trường từ .env
+// Load environment variables
+require('dotenv').config();
+
+// Set environment variables manually as fallback
+if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'your-super-secret-jwt-key-here-change-this-in-production';
+}
+if (!process.env.MONGODB_URI) {
+    process.env.MONGODB_URI = 'mongodb+srv://TrungChienn:Chien123@latn.af6hwio.mongodb.net/LATNShop08?retryWrites=true&w=majority&appName=LATN';
+}
+if (!process.env.PORT) {
+    process.env.PORT = '3001';
+}
+
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -16,7 +30,7 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bo
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Kết nối MongoDB với các tùy chọn được hỗ trợ trong phiên bản mới
-mongoose.connect('mongodb+srv://TrungChienn:Chien2004@latn.af6hwio.mongodb.net/LATNShop08?retryWrites=true&w=majority&appName=LATN', {
+mongoose.connect(process.env.MONGODB_URI, {
     // Tùy chọn cho Driver
     connectTimeoutMS: 30000,         // Tăng thời gian timeout kết nối lên 30 giây
     socketTimeoutMS: 45000,          // Tăng thời gian chờ socket lên 45 giây
