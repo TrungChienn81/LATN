@@ -7,6 +7,7 @@ import { CartProvider } from './contexts/CartContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Import Layout Components
 import PublicLayout from './components/Layout/PublicLayout'; // <<< Import PublicLayout
@@ -45,22 +46,34 @@ import ShopOrderManagement from './components/Shop/ShopOrderManagement';
 import ShopSettings from './components/Shop/ShopSettings';
 import ShopOverview from './components/Shop/ShopOverview';
 
+// Import Admin Components
+import PaymentManagement from './components/Admin/PaymentManagement';
+
 // Import AI Test Page
 import AITestPage from './pages/AITestPage';
 import ChatTestPage from './pages/ChatTestPage';
 import ChatSetupPage from './pages/ChatSetupPage';
 import RAGTestPage from './pages/RAGTestPage';
 
+// Import Demo Payment Page
+import DemoPaymentPage from './pages/DemoPaymentPage';
+
+// Import Payment Return Pages
+import VNPayReturnPage from './pages/VNPayReturnPage';
+import MoMoReturnPage from './pages/MoMoReturnPage';
+
 // Import Chat Provider
 import ChatProvider from './components/Chat/ChatProvider';
 
 function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <ChatProvider>
-          <CssBaseline /> {/* CssBaseline có thể để ở đây hoặc trong từng Layout */}
-        <ToastContainer
+    <>
+      <CssBaseline />
+      <ErrorBoundary>
+        <AuthProvider>
+          <CartProvider>
+            <ChatProvider>
+              <ToastContainer
           position="top-right"
           autoClose={3000}
           hideProgressBar={false}
@@ -102,6 +115,13 @@ function App() {
             {/* Chat Setup Page */}
             <Route path="/chat-setup" element={<ChatSetupPage />} />
             
+            {/* Demo Payment Page */}
+            <Route path="/demo-payment" element={<DemoPaymentPage />} />
+            
+            {/* Payment Return Pages */}
+            <Route path="/vnpay-return" element={<VNPayReturnPage />} />
+            <Route path="/momo-return" element={<MoMoReturnPage />} />
+            
             {/* Shop Dashboard Routes */}
             <Route path="/my-shop/*" element={<ShopDashboardPage />}>
               <Route path="overview" element={<ShopOverview />} />
@@ -124,6 +144,7 @@ function App() {
                 <Route path="overview" element={<AdminOverview />} />
                 <Route path="users" element={<AdminUserManagement />} />
                 <Route path="products" element={<AdminProductManagement />} />
+                <Route path="payments" element={<PaymentManagement />} />
                 <Route path="categories" element={<CategoryManagement />} />
                 <Route path="brands" element={<BrandManagement />} />
                 {/* Các route admin con khác */} 
@@ -136,11 +157,15 @@ function App() {
 
           {/* TODO: Thêm các layout/routes khác nếu cần (ví dụ: Seller Layout) */} 
           {/* TODO: Thêm trang 404 Not Found */}
-          {/* <Route path="*" element={<NotFoundPage />} /> */}
-        </Routes>
-        </ChatProvider>
-      </CartProvider>
-    </AuthProvider>
+          
+          {/* Catch-all route - redirect to home for undefined routes */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+            </ChatProvider>
+          </CartProvider>
+        </AuthProvider>
+      </ErrorBoundary>
+    </>
   );
 }
 

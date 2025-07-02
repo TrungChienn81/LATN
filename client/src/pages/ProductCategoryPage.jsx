@@ -773,12 +773,10 @@ const ProductCategoryPage = () => {
                       }}
                     >
                       <ProductTracker product={product}>
-                        <Box className="product-card-wrapper">
-                          <ProductCardNew 
-                            product={product} 
-                            onClick={() => handleProductClick(product._id)}
-                          />
-                        </Box>
+                        <ProductCardNew 
+                          product={product} 
+                          onClick={() => handleProductClick(product._id)}
+                        />
                       </ProductTracker>
                     </Grid>
                   ))}

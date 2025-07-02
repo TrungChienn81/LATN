@@ -27,6 +27,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import PaymentIcon from '@mui/icons-material/Payment';
 import AdminOverview from '../components/Admin/AdminOverview'; // Import AdminOverview
 
 // import { useAuth } from '../contexts/AuthContext'; // Có thể cần nếu muốn lấy thông tin admin
@@ -40,6 +41,7 @@ const AdminDashboardPage = () => {
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/admin/dashboard/overview' }, 
     { text: 'Products', icon: <InventoryIcon />, path: '/admin/dashboard/products' }, 
     { text: 'Orders', icon: <ShoppingCartIcon />, path: '/admin/dashboard/orders' },
+    { text: 'Payments', icon: <PaymentIcon />, path: '/admin/dashboard/payments' },
     { text: 'Customers', icon: <PeopleIcon />, path: '/admin/dashboard/users' }, 
     { text: 'Settings', icon: <SettingsIcon />, path: '/admin/dashboard/settings' },
   ];

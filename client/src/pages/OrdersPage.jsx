@@ -478,57 +478,129 @@ const OrdersPage = () => {
             <Box>
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="h6" gutterBottom>
-                  Thông tin chuyển khoản
+                  💰 Thông tin chuyển khoản
+                </Typography>
+                <Typography variant="body2">
+                  Vui lòng chọn một trong các tài khoản ngân hàng bên dưới để thực hiện chuyển khoản
                 </Typography>
               </Alert>
               
-              <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+              {/* Instructions */}
+              {bankingDetails.instructions && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle1" color="primary" gutterBottom>
+                    📝 Hướng dẫn thanh toán:
+                  </Typography>
+                  <Paper sx={{ p: 2, bgcolor: 'info.light', color: 'info.contrastText' }}>
+                    {bankingDetails.instructions.map((instruction, index) => (
+                      <Typography key={index} variant="body2" sx={{ mb: 1 }}>
+                        {instruction}
+                      </Typography>
+                    ))}
+                  </Paper>
+                </Box>
+              )}
+
+              {/* Payment Summary */}
+              <Paper sx={{ p: 2, bgcolor: 'error.light', mb: 3 }}>
                 <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Ngân hàng:
+                  <Grid item xs={6}>
+                    <Typography variant="subtitle2" color="error.contrastText">
+                      Nội dung chuyển khoản:
                     </Typography>
-                    <Typography variant="body1" fontWeight="bold">
-                      {bankingDetails.bankName}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Số tài khoản:
-                    </Typography>
-                    <Typography variant="body1" fontWeight="bold" color="primary">
-                      {bankingDetails.accountNumber}
+                    <Typography variant="h6" fontWeight="bold" color="error.contrastText">
+                      {bankingDetails.transferContent}
                     </Typography>
                   </Grid>
+                  <Grid item xs={6} textAlign="right">
+                    <Typography variant="subtitle2" color="error.contrastText">
+                      Số tiền:
+                    </Typography>
+                    <Typography variant="h5" fontWeight="bold" color="error.contrastText">
+                      {formatPriceToVND(bankingDetails.amount / 1000000)}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              {/* Bank Options */}
+              <Typography variant="subtitle1" color="primary" gutterBottom sx={{ mt: 3 }}>
+                🏦 Chọn tài khoản ngân hàng:
+              </Typography>
+              
+              {bankingDetails.banks?.map((bank, index) => (
+                <Paper key={index} sx={{ p: 2, mb: 2, border: '1px solid', borderColor: 'primary.main' }}>
+                  <Grid container spacing={2}>
                   <Grid item xs={12}>
+                      <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                        {bank.bankName}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {bank.branch}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Số tài khoản:
+                      </Typography>
+                      <Typography 
+                        variant="h6" 
+                        fontWeight="bold" 
+                        color="primary"
+                        sx={{ 
+                          letterSpacing: 1,
+                          fontFamily: 'monospace',
+                          cursor: 'pointer',
+                          '&:hover': { backgroundColor: 'action.hover' },
+                          p: 1,
+                          borderRadius: 1
+                        }}
+                        onClick={() => navigator.clipboard.writeText(bank.accountNumber)}
+                        title="Click để copy"
+                      >
+                        {bank.accountNumber}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
                     <Typography variant="subtitle2" color="text.secondary">
                       Tên tài khoản:
                     </Typography>
                     <Typography variant="body1" fontWeight="bold">
-                      {bankingDetails.accountName}
+                        {bank.accountName}
+                      </Typography>
+                    </Grid>
+                    {bank.swiftCode && (
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary">
+                          SWIFT Code: <strong>{bank.swiftCode}</strong>
+                    </Typography>
+                      </Grid>
+                    )}
+                  </Grid>
+                </Paper>
+              ))}
+
+              {/* Contact Info */}
+              <Paper sx={{ p: 2, bgcolor: 'success.light', mt: 3 }}>
+                <Typography variant="subtitle1" color="success.contrastText" gutterBottom>
+                  📞 Liên hệ hỗ trợ:
+                    </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="success.contrastText">
+                      Hotline: <strong>{bankingDetails.hotline}</strong>
                     </Typography>
                   </Grid>
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Nội dung chuyển khoản:
-                    </Typography>
-                    <Typography variant="body1" fontWeight="bold" color="error">
-                      {bankingDetails.transferContent}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Số tiền:
-                    </Typography>
-                    <Typography variant="h6" color="primary">
-                      {formatPriceToVND(bankingDetails.amount / 1000000)}
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="success.contrastText">
+                      Email: <strong>{bankingDetails.email}</strong>
                     </Typography>
                   </Grid>
                 </Grid>
               </Paper>
               
               <Alert severity="warning" sx={{ mt: 2 }}>
-                {bankingDetails.note}
+                <strong>Lưu ý quan trọng:</strong> {bankingDetails.note}
               </Alert>
             </Box>
           )}

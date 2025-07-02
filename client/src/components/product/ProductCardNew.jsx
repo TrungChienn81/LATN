@@ -68,14 +68,24 @@ const ProductCardNew = ({ product, onClick }) => {
         justifyContent: 'center',
         p: 1,
         bgcolor: 'background.paper',
-        flexShrink: 0
+        flexShrink: 0,
+        overflow: 'visible',
+        '& img': {
+          maxHeight: '100%',
+          maxWidth: '100%',
+          objectFit: 'contain',
+          zIndex: 2
+        }
       }}>
+        {console.log('Product image URL:', product.images?.[0], 'Product:', product.name)}
         <ImageWithFallback
           src={product.images?.[0] || ''}
           alt={product.name}
           sx={{
             maxWidth: '100%',
             maxHeight: '100%',
+            width: 'auto',
+            height: 'auto',
             objectFit: 'contain'
           }}
         />

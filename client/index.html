@@ -4,10 +4,98 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
     <title>LATN</title>
+    
+    <!-- Global Ultimate Error Suppression -->
+    <script type="text/javascript">
+      (function() {
+        'use strict';
+        
+        // Create the most aggressive error suppression possible
+        const globalSuppressPatterns = [
+          'Content-Security-Policy',
+          'default-src',
+          'style-src',
+          'img-src',
+          'script-src',
+          'timer is not defined',
+          'updateTime',
+          'jQuery.Deferred exception',
+          'custom.min.js',
+          'jquery.bundles.js',
+          'host-console-events.js',
+          'content-dom-snapshot.js',
+          'vnpayment.vn',
+          'sandbox.vnpayment',
+          'Did you want to add it as a directive and forget a semicolon',
+          'VM36:',
+          'runtime.lastError',
+          'extension port',
+          'Permissions-Policy'
+        ];
+        
+        function shouldSuppress(message) {
+          return globalSuppressPatterns.some(pattern => 
+            message && message.toString().includes(pattern)
+          );
+        }
+        
+        // 1. Console overrides
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        const originalLog = console.log;
+        
+        console.error = function(...args) {
+          if (!shouldSuppress(args.join(' '))) {
+            originalError.apply(console, args);
+          }
+        };
+        
+        console.warn = function(...args) {
+          if (!shouldSuppress(args.join(' '))) {
+            originalWarn.apply(console, args);
+          }
+        };
+        
+        console.log = function(...args) {
+          if (!shouldSuppress(args.join(' '))) {
+            originalLog.apply(console, args);
+          }
+        };
+        
+        // 2. Global error handlers
+        window.addEventListener('error', function(e) {
+          if (shouldSuppress(e.message || e.error?.message)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return false;
+          }
+        }, true);
+        
+        window.addEventListener('unhandledrejection', function(e) {
+          if (shouldSuppress(e.reason?.message || e.reason)) {
+            e.preventDefault();
+            return false;
+          }
+        }, true);
+        
+        // 3. Override window.onerror
+        window.onerror = function(message, source, lineno, colno, error) {
+          if (shouldSuppress(message)) {
+            return true; // Suppress error
+          }
+          return false; // Let other errors through
+        };
+        
+        console.log('🔇 Ultimate error suppression activated');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    
+
   </body>
 </html>

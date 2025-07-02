@@ -433,7 +433,7 @@ async function getRelevantContext(query) {
         
         // Sort by match score (highest first)
         uniqueProducts.sort((a, b) => (b._matchScore || 0) - (a._matchScore || 0));
-        
+            
         if (uniqueProducts.length > 0) {
             console.log(`🎉 RAG found ${uniqueProducts.length} relevant products:`);
             uniqueProducts.slice(0, 3).forEach(p => {
@@ -443,13 +443,13 @@ async function getRelevantContext(query) {
         }
         
         // Fallback: If no specific products found, return trending
-        console.log('🔄 No specific matches, returning trending products');
-        return await Product.find({})
-            .populate('category', 'name')
-            .populate('brand', 'name')
-            .populate('shopId', 'shopName')
-            .sort({ createdAt: -1 })
-            .limit(5);
+            console.log('🔄 No specific matches, returning trending products');
+            return await Product.find({})
+                .populate('category', 'name')
+                .populate('brand', 'name')
+                .populate('shopId', 'shopName')
+                .sort({ createdAt: -1 })
+                .limit(5);
 
     } catch (error) {
         console.error('Error getting relevant context:', error);

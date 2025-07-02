@@ -1,110 +1,69 @@
 import React, { useState } from 'react';
-import { Box } from '@mui/material';
 
 /**
- * Enhanced image component with fallback handling and URL normalization
+ * Simple image component with fallback
  */
 const ImageWithFallback = (props) => {
   const { 
     src, 
     alt = 'Image', 
     sx = {},
+    style = {},
     ...rest 
   } = props;
   
   const [hasError, setHasError] = useState(false);
   
-  // Nếu không có ảnh hoặc đã xảy ra lỗi, hiển thị placeholder
-  if (!src || hasError) {
-    return (
-      <Box
-        sx={{
-          width: sx.width || 100,
-          height: sx.height || 100,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#f0f0f0',
-          color: '#757575',
-          fontSize: '12px',
-          border: '1px solid #e0e0e0',
-          borderRadius: sx.borderRadius || 0,
-          ...sx
-        }}
-        {...rest}
-      >
-        No Image
-      </Box>
-    );
-  }
-
-  // Chuẩn bị URL
+  // Debug log
+  console.log('ImageWithFallback rendering:', {
+    src,
+    hasError,
+    alt
+  });
+  
+  // Determine the actual src to use
   let imageSrc = src;
   
-  // Xử lý các trường hợp URL
-  if (src) {
-    try {
-      // Handle URLs that might start with // (protocol-relative)
-      if (src.startsWith('//')) {
-        imageSrc = `https:${src}`;
-      } 
-      // Handle absolute URLs (http, https, data, blob)
-      else if (src.startsWith('http') || src.startsWith('data:') || src.startsWith('blob:')) {
-        imageSrc = src;
-      }
-      // Handle local server uploads (/uploads/...)
-      else if (src.startsWith('/uploads/')) {
-        const apiBaseUrl = `${window.location.protocol}//${window.location.hostname}:3001`;
-        imageSrc = `${apiBaseUrl}${src}`;
-      }
-      // Handle URLs that might be missing the protocol
-      else if (src.includes('cdn.') || src.includes('.com/') || src.includes('.net/') || src.includes('.org/')) {
-        imageSrc = src.startsWith('www.') ? `https://${src}` : src;
-        if (!imageSrc.startsWith('http')) {
-          imageSrc = `https://${imageSrc}`;
-        }
-      }
-      // Handle other relative paths
-      else if (!src.match(/^[a-z]+:/i)) {
-        const apiBaseUrl = `${window.location.protocol}//${window.location.hostname}:3001`;
-        imageSrc = src.startsWith('/') ? `${apiBaseUrl}${src}` : `${apiBaseUrl}/${src}`;
-      }
-    } catch (error) {
-      console.error('Error processing image URL:', error);
-      imageSrc = src; // Fallback to original source on error
-    }
-    
-    // Log the image source for debugging
-    console.log(`Image source: ${src} → ${imageSrc}`);
+  // If no src provided or error occurred, use placeholder
+  if (!src || hasError) {
+    // Use a data URL for a simple gray placeholder
+    imageSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzc1NzU3NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
   }
 
-  // Render image with error handler
+  // Force consistent styling to make images display
+  const combinedStyle = {
+    width: '100%', 
+    height: 'auto',
+    maxWidth: '100%',
+    maxHeight: '100%',
+    objectFit: 'contain',
+    objectPosition: 'center',
+    display: 'block',
+    position: 'relative',
+    zIndex: 1,
+    ...style,
+    ...sx
+  };
+
   return (
-    <Box 
-      sx={{
-        position: 'relative', 
-        overflow: 'hidden',
-        width: sx.width || '100%',
-        height: sx.height || '100%',
-        ...sx
-      }}
-    >
-      <img
-        src={imageSrc}
-        alt={alt}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'contain',
-          display: 'block',
-        }}
-        onError={(e) => {
-          console.log(`Image failed to load: ${imageSrc}`);
+    <img
+      src={imageSrc}
+      alt={alt}
+      style={combinedStyle}
+      onError={(e) => {
+        console.error('Image failed to load:', src, e);
+        if (!hasError) {
           setHasError(true);
-        }}
-        {...rest}
-      />
-    </Box>
+        }
+      }}
+      onLoad={() => {
+        console.log('Image loaded successfully:', src);
+      }}
+      loading="eager"
+      crossOrigin="anonymous"
+      referrerPolicy="no-referrer"
+      {...rest}
+    />
   );
 };
 

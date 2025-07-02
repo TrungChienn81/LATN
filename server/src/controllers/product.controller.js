@@ -311,9 +311,9 @@ exports.getAllProducts = async (req, res, next) => {
           case 'name': sortBy = 'name'; break;
           default: sortBy = sortBy.split(',').join(' ');
         }
-        query = query.sort(sortBy);
-      } else {
-        query = query.sort('-createdAt');
+      query = query.sort(sortBy);
+    } else {
+      query = query.sort('-createdAt');
       }
       products = await query;
       console.log(`🔍 Retry query returned ${products.length} products`);

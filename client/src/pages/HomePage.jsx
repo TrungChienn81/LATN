@@ -150,9 +150,7 @@ const RecommendedProducts = () => {
             }}
           >
             <ProductTracker product={product}>
-              <Box className="product-card-wrapper">
-                <ProductCardNew product={product} />
-              </Box>
+              <ProductCardNew product={product} />
             </ProductTracker>
           </Grid>
         ))}
@@ -230,7 +228,8 @@ const ProductSection = ({ title, fetchUrl, viewAllUrl }) => {
     );
   }
   
-  if (products.length === 0) return null;
+  // DEBUG: Always show section even if no products
+  console.log(`${title} - Products found:`, products.length);
   
   return (
     <Box sx={{ mt: 4 }}>
@@ -274,9 +273,7 @@ const ProductSection = ({ title, fetchUrl, viewAllUrl }) => {
             }}
           >
             <ProductTracker product={product}>
-              <Box className="product-card-wrapper">
-                <ProductCardNew product={product} />
-              </Box>
+              <ProductCardNew product={product} />
             </ProductTracker>
           </Grid>
         ))}

@@ -195,14 +195,58 @@ const CheckoutPage = () => {
       console.log('first item:', orderData.items?.[0]);
       console.log('========================');
 
-      const response = await api.post('/orders', orderData);
-      
-      if (response.data.success) {
-        await clearCart();
-        toast.success('Đặt hàng thành công!');
-        navigate('/orders', { 
-          state: { orderNumber: response.data.data.orderNumber }
-        });
+      // Use the correct endpoint based on payment method
+      if (formData.paymentMethod === 'vnpay') {
+        // For VNPay, use the payment URL creation endpoint
+        const response = await api.post('/orders/create-payment-url', orderData);
+        
+        console.log('VNPay response:', response.data);
+        
+        if (response.data.success) {
+          const paymentUrl = response.data.paymentUrl || response.data.data?.paymentUrl;
+          
+          if (paymentUrl && paymentUrl !== 'undefined') {
+            console.log('Redirecting to VNPay URL:', paymentUrl);
+            // Redirect to VNPay payment URL
+            window.location.href = paymentUrl;
+          } else {
+            console.error('Invalid payment URL received:', paymentUrl);
+            toast.error('Không thể tạo URL thanh toán VNPay. Vui lòng thử lại.');
+          }
+        } else {
+          toast.error(response.data.message || 'Không thể tạo URL thanh toán VNPay');
+        }
+      } else if (formData.paymentMethod === 'momo') {
+        // For MoMo, use the payment URL creation endpoint
+        const response = await api.post('/orders/create-payment-url', orderData);
+        
+        console.log('MoMo response:', response.data);
+        
+        if (response.data.success) {
+          const paymentUrl = response.data.paymentUrl || response.data.data?.paymentUrl;
+          
+          if (paymentUrl && paymentUrl !== 'undefined') {
+            console.log('Redirecting to MoMo URL:', paymentUrl);
+            // Redirect to MoMo payment URL
+            window.location.href = paymentUrl;
+          } else {
+            console.error('Invalid payment URL received:', paymentUrl);
+            toast.error('Không thể tạo URL thanh toán MoMo. Vui lòng thử lại.');
+          }
+        } else {
+          toast.error(response.data.message || 'Không thể tạo URL thanh toán MoMo');
+        }
+      } else {
+        // For other payment methods (COD, etc.), use regular order creation
+        const response = await api.post('/orders', orderData);
+        
+        if (response.data.success) {
+          await clearCart();
+          toast.success('Đặt hàng thành công!');
+          navigate('/orders', { 
+            state: { orderNumber: response.data.data.orderNumber }
+          });
+        }
       }
     } catch (error) {
       console.error('Error placing order:', error);
@@ -395,6 +439,33 @@ const CheckoutPage = () => {
                 />
               </RadioGroup>
             </FormControl>
+
+            {/* High Amount Warning for MoMo */}
+            {formData.paymentMethod === 'momo' && cart.totalAmount > 50 && (
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                <Typography variant="body2">
+                  <strong>⚠️ Cảnh báo giá trị cao:</strong> Đơn hàng có giá trị {cart.totalAmount.toFixed(2)} triệu VND. 
+                  MoMo sandbox có giới hạn thanh toán. Nếu gặp vấn đề, vui lòng chọn VNPay hoặc chuyển khoản ngân hàng.
+                </Typography>
+              </Alert>
+            )}
+
+            {/* Payment Info */}
+            {formData.paymentMethod === 'momo' && (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                <Typography variant="body2">
+                  Thanh toán qua ví điện tử MoMo. Bạn sẽ được chuyển đến ứng dụng MoMo để hoàn tất thanh toán.
+                </Typography>
+              </Alert>
+            )}
+
+            {formData.paymentMethod === 'vnpay' && (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                <Typography variant="body2">
+                  Thanh toán qua VNPay. Hỗ trợ thẻ ATM, Internet Banking, Visa/MasterCard.
+                </Typography>
+              </Alert>
+            )}
 
             <Divider sx={{ my: 3 }} />
 

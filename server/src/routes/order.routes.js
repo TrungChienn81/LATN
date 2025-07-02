@@ -1,31 +1,44 @@
 // src/routes/order.routes.js
 const express = require('express');
 const { 
-    createOrder, 
     getUserOrders, 
     getOrder, 
-    updateOrderStatus, 
     cancelOrder,
-    processPayment,
-    handlePaymentCallback,
-    confirmBankTransferPayment
+    getShopOrders,
+    updateShopOrderStatus,
+    createOrder,
+    createPaymentUrl,
+    vnpayReturn,
+    momoReturn
 } = require('../controllers/order.controller');
-const { protect, restrictTo } = require('../middleware/auth.middleware');
+const protect = require('../middleware/protect');
+const authorize = require('../middleware/authorize');
 
 const router = express.Router();
 
+// Public routes
+router.get('/vnpay_return', vnpayReturn);
+router.get('/momo_return', momoReturn);
+router.post('/momo_return', momoReturn);
+
+// Protected routes
+router.use(protect);
+
 // Customer routes
-router.post('/', protect, createOrder);
-router.get('/my-orders', protect, getUserOrders);
-router.get('/:orderId', protect, getOrder);
-router.put('/:orderId/cancel', protect, cancelOrder);
+router.get('/my-orders', getUserOrders);
+router.get('/:orderId', getOrder);
+router.put('/:orderId/cancel', cancelOrder);
+router.post('/', createOrder);
+router.post('/create-payment-url', createPaymentUrl);
 
-// Payment routes
-router.post('/:orderId/payment', protect, processPayment);
-router.post('/payment/callback/:method', handlePaymentCallback); // Public route for payment gateway callbacks
-router.put('/:orderId/confirm-payment', protect, restrictTo('admin'), confirmBankTransferPayment);
+// Shop routes
+router.get('/shop/orders', authorize('shop'), getShopOrders);
+router.put('/:orderId/shop/status', authorize('shop'), updateShopOrderStatus);
 
-// Admin routes
-router.put('/:orderId/status', protect, restrictTo('admin'), updateOrderStatus);
+// Additional payment callback routes
+router.get('/payment/callback/vnpay', vnpayReturn);
+router.post('/payment/callback/vnpay', vnpayReturn);
+router.get('/payment/callback/momo', momoReturn);
+router.post('/payment/callback/momo', momoReturn);
 
 module.exports = router;
