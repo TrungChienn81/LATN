@@ -23,7 +23,11 @@ import {
   CircularProgress,
   IconButton,
   Tooltip,
-  Avatar
+  Avatar,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   AccountBalance as BankIcon,
@@ -34,7 +38,8 @@ import {
   Email as EmailIcon,
   Person as PersonIcon,
   Receipt as ReceiptIcon,
-  MonetizationOn as MoneyIcon
+  MonetizationOn as MoneyIcon,
+  LocalShipping as ShippingIcon
 } from '@mui/icons-material';
 import { formatPriceToVND } from '../../utils/formatters';
 import api from '../../services/api';
@@ -44,9 +49,9 @@ const PaymentManagement = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({});
-  const [confirmDialog, setConfirmDialog] = useState({ open: false, order: null });
-  const [transactionCode, setTransactionCode] = useState('');
-  const [confirmNote, setConfirmNote] = useState('');
+  const [shippingDialog, setShippingDialog] = useState({ open: false, order: null });
+  const [newStatus, setNewStatus] = useState('');
+  const [shippingNote, setShippingNote] = useState('');
   const [processing, setProcessing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [viewDialog, setViewDialog] = useState(false);
@@ -58,43 +63,44 @@ const PaymentManagement = () => {
   const fetchPendingOrders = async (page = 1) => {
     try {
       setLoading(true);
-      const response = await api.get(`/orders/admin/pending-payments?page=${page}&limit=10`);
+      // Lấy danh sách đơn hàng đã thanh toán
+      const response = await api.get(`/orders/admin?page=${page}&limit=10&paymentStatus=paid`);
       
       if (response.data.success) {
         setOrders(response.data.data);
         setPagination(response.data.pagination);
       }
     } catch (error) {
-      console.error('Error fetching pending orders:', error);
-      toast.error('Không thể tải danh sách đơn hàng chờ xác nhận');
+      console.error('Error fetching paid orders:', error);
+      toast.error('Không thể tải danh sách đơn hàng đã thanh toán');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleConfirmPayment = async () => {
-    if (!transactionCode.trim()) {
-      toast.error('Vui lòng nhập mã giao dịch');
+  const handleUpdateShippingStatus = async () => {
+    if (!newStatus) {
+      toast.error('Vui lòng chọn trạng thái giao hàng');
       return;
     }
 
     try {
       setProcessing(true);
-      const response = await api.put(`/orders/${confirmDialog.order._id}/confirm-payment`, {
-        transactionCode: transactionCode.trim(),
-        note: confirmNote.trim()
+      const response = await api.put(`/orders/${shippingDialog.order._id}/status`, {
+        orderStatus: newStatus,
+        note: shippingNote.trim()
       });
 
       if (response.data.success) {
-        toast.success('Đã xác nhận thanh toán thành công!');
-        setConfirmDialog({ open: false, order: null });
-        setTransactionCode('');
-        setConfirmNote('');
+        toast.success('Đã cập nhật trạng thái giao hàng thành công!');
+        setShippingDialog({ open: false, order: null });
+        setNewStatus('');
+        setShippingNote('');
         fetchPendingOrders(); // Refresh list
       }
     } catch (error) {
-      console.error('Error confirming payment:', error);
-      toast.error(error.response?.data?.message || 'Có lỗi xảy ra khi xác nhận thanh toán');
+      console.error('Error updating shipping status:', error);
+      toast.error(error.response?.data?.message || 'Có lỗi xảy ra khi cập nhật trạng thái giao hàng');
     } finally {
       setProcessing(false);
     }
@@ -262,7 +268,7 @@ const PaymentManagement = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
         <CircularProgress />
       </Box>
     );
@@ -271,26 +277,15 @@ const PaymentManagement = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        💳 Quản lý thanh toán chuyển khoản
+        💳 Quản lý đơn hàng đã thanh toán
       </Typography>
       
       <Alert severity="info" sx={{ mb: 3 }}>
-        Danh sách các đơn hàng chờ xác nhận thanh toán chuyển khoản. 
-        Vui lòng kiểm tra kỹ thông tin giao dịch trước khi xác nhận.
+        Danh sách các đơn hàng đã thanh toán. Vui lòng kiểm tra kỹ thông tin đơn hàng trước khi cập nhật trạng thái giao hàng.
       </Alert>
 
       {orders.length === 0 ? (
-        <Card>
-          <CardContent sx={{ textAlign: 'center', py: 4 }}>
-            <BankIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" color="text.secondary">
-              Không có đơn hàng nào cần xác nhận thanh toán
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Tất cả đơn hàng chuyển khoản đã được xử lý
-            </Typography>
-          </CardContent>
-        </Card>
+        <Alert severity="info">Không có đơn hàng đã thanh toán nào cần xử lý</Alert>
       ) : (
         <>
           <Card>
@@ -298,11 +293,11 @@ const PaymentManagement = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Đơn hàng</TableCell>
+                    <TableCell>Mã đơn hàng</TableCell>
                     <TableCell>Khách hàng</TableCell>
                     <TableCell align="center">Ngày đặt</TableCell>
-                    <TableCell align="right">Số tiền</TableCell>
-                    <TableCell align="center">Trạng thái</TableCell>
+                    <TableCell align="center">Trạng thái giao hàng</TableCell>
+                    <TableCell align="right">Tổng tiền</TableCell>
                     <TableCell align="center">Thao tác</TableCell>
                   </TableRow>
                 </TableHead>
@@ -334,18 +329,27 @@ const PaymentManagement = () => {
                           {formatDate(order.createdAt)}
                         </Typography>
                       </TableCell>
+                      <TableCell align="center">
+                        <Chip 
+                          label={order.orderStatus === 'pending' ? 'Chờ xử lý' :
+                                 order.orderStatus === 'processing' ? 'Đang xử lý' :
+                                 order.orderStatus === 'shipped' ? 'Đang giao hàng' :
+                                 order.orderStatus === 'delivered' ? 'Đã giao hàng' :
+                                 order.orderStatus === 'completed' ? 'Hoàn thành' :
+                                 order.orderStatus === 'cancelled' ? 'Đã hủy' : order.orderStatus}
+                          color={order.orderStatus === 'pending' ? 'warning' :
+                                order.orderStatus === 'processing' ? 'info' :
+                                order.orderStatus === 'shipped' ? 'primary' :
+                                order.orderStatus === 'delivered' ? 'success' :
+                                order.orderStatus === 'completed' ? 'success' :
+                                'error'}
+                          size="small"
+                        />
+                      </TableCell>
                       <TableCell align="right">
-                        <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                        <Typography variant="body1" fontWeight="bold">
                           {formatPriceToVND(order.totalAmount)}
                         </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip
-                          label="Chờ xác nhận"
-                          color="warning"
-                          size="small"
-                          icon={<BankIcon />}
-                        />
                       </TableCell>
                       <TableCell align="center">
                         <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
@@ -357,13 +361,16 @@ const PaymentManagement = () => {
                               <ViewIcon />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Xác nhận thanh toán">
+                          <Tooltip title="Cập nhật trạng thái giao hàng">
                             <IconButton
                               size="small"
-                              color="success"
-                              onClick={() => setConfirmDialog({ open: true, order })}
+                              color="primary"
+                              onClick={() => {
+                                setShippingDialog({ open: true, order });
+                                setNewStatus(order.orderStatus);
+                              }}
                             >
-                              <CheckIcon />
+                              <ShippingIcon />
                             </IconButton>
                           </Tooltip>
                         </Box>
@@ -382,7 +389,7 @@ const PaymentManagement = () => {
                 <Button
                   key={page}
                   variant={page === pagination.page ? 'contained' : 'outlined'}
-                  onClick={() => fetchPendingOrders(page)}
+                  onClick={() => fetchPaidOrders(page)}
                   sx={{ mx: 0.5 }}
                 >
                   {page}
@@ -393,45 +400,64 @@ const PaymentManagement = () => {
         </>
       )}
 
-      {/* Confirm Payment Dialog */}
-      <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog({ open: false, order: null })} maxWidth="sm" fullWidth>
+      {/* Update Shipping Status Dialog */}
+      <Dialog open={shippingDialog.open} onClose={() => setShippingDialog({ open: false, order: null })} maxWidth="sm" fullWidth>
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CheckIcon color="success" />
-            Xác nhận thanh toán chuyển khoản
+            <ShippingIcon color="primary" />
+            Cập nhật trạng thái giao hàng
           </Box>
         </DialogTitle>
         <DialogContent>
-          {confirmDialog.order && (
+          {shippingDialog.order && (
             <>
               <Alert severity="info" sx={{ mb: 3 }}>
                 <Typography variant="subtitle1" gutterBottom>
-                  Đơn hàng: <strong>#{confirmDialog.order.orderNumber}</strong>
+                  Đơn hàng: <strong>#{shippingDialog.order.orderNumber}</strong>
                 </Typography>
                 <Typography variant="body2">
-                  Khách hàng: <strong>{confirmDialog.order.customerInfo?.name || confirmDialog.order.customer?.name}</strong>
+                  Khách hàng: <strong>{shippingDialog.order.customerInfo?.name || shippingDialog.order.customer?.name}</strong>
                 </Typography>
                 <Typography variant="body2">
-                  Số tiền: <strong>{formatPriceToVND(confirmDialog.order.totalAmount)}</strong>
+                  Số tiền: <strong>{formatPriceToVND(shippingDialog.order.totalAmount)}</strong>
+                </Typography>
+                <Typography variant="body2">
+                  Phương thức thanh toán: <strong>
+                    {shippingDialog.order.paymentMethod === 'bankTransfer' ? 'Chuyển khoản' : 
+                     shippingDialog.order.paymentMethod === 'momo' ? 'MoMo' :
+                     shippingDialog.order.paymentMethod === 'cod' ? 'Tiền mặt khi nhận hàng' : 
+                     shippingDialog.order.paymentMethod}
+                  </strong>
+                </Typography>
+                <Typography variant="body2" color="success.main">
+                  <CheckIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
+                  Đã thanh toán
                 </Typography>
               </Alert>
 
-              <TextField
-                fullWidth
-                label="Mã giao dịch *"
-                value={transactionCode}
-                onChange={(e) => setTransactionCode(e.target.value)}
-                placeholder="Nhập mã giao dịch từ ngân hàng"
-                sx={{ mb: 2 }}
-                required
-              />
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel id="shipping-status-label">Trạng thái giao hàng *</InputLabel>
+                <Select
+                  labelId="shipping-status-label"
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  label="Trạng thái giao hàng *"
+                  required
+                >
+                  <MenuItem value="processing">Đang xử lý</MenuItem>
+                  <MenuItem value="shipped">Đang giao hàng</MenuItem>
+                  <MenuItem value="delivered">Đã giao hàng</MenuItem>
+                  <MenuItem value="completed">Hoàn thành</MenuItem>
+                  <MenuItem value="cancelled">Đã hủy</MenuItem>
+                </Select>
+              </FormControl>
 
               <TextField
                 fullWidth
                 label="Ghi chú"
-                value={confirmNote}
-                onChange={(e) => setConfirmNote(e.target.value)}
-                placeholder="Ghi chú thêm (tùy chọn)"
+                value={shippingNote}
+                onChange={(e) => setShippingNote(e.target.value)}
+                placeholder="Ghi chú thêm về việc giao hàng (tùy chọn)"
                 multiline
                 rows={3}
               />
@@ -439,17 +465,17 @@ const PaymentManagement = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDialog({ open: false, order: null })}>
+          <Button onClick={() => setShippingDialog({ open: false, order: null })}>
             Hủy
           </Button>
           <Button
             variant="contained"
-            color="success"
-            onClick={handleConfirmPayment}
-            disabled={!transactionCode.trim() || processing}
-            startIcon={processing ? <CircularProgress size={20} /> : <CheckIcon />}
+            color="primary"
+            onClick={handleUpdateShippingStatus}
+            disabled={!newStatus || processing}
+            startIcon={processing ? <CircularProgress size={20} /> : <ShippingIcon />}
           >
-            {processing ? 'Đang xử lý...' : 'Xác nhận thanh toán'}
+            {processing ? 'Đang xử lý...' : 'Cập nhật trạng thái'}
           </Button>
         </DialogActions>
       </Dialog>

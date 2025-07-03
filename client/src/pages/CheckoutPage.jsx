@@ -236,6 +236,26 @@ const CheckoutPage = () => {
         } else {
           toast.error(response.data.message || 'Không thể tạo URL thanh toán MoMo');
         }
+      } else if (formData.paymentMethod === 'paypal') {
+        // For PayPal, use the payment URL creation endpoint
+        const response = await api.post('/orders/create-payment-url', orderData);
+        
+        console.log('PayPal response:', response.data);
+        
+        if (response.data.success) {
+          const paymentUrl = response.data.paymentUrl || response.data.data?.paymentUrl;
+          
+          if (paymentUrl && paymentUrl !== 'undefined') {
+            console.log('Redirecting to PayPal URL:', paymentUrl);
+            // Redirect to PayPal payment URL
+            window.location.href = paymentUrl;
+          } else {
+            console.error('Invalid payment URL received:', paymentUrl);
+            toast.error('Không thể tạo URL thanh toán PayPal. Vui lòng thử lại.');
+          }
+        } else {
+          toast.error(response.data.message || 'Không thể tạo URL thanh toán PayPal');
+        }
       } else {
         // For other payment methods (COD, etc.), use regular order creation
         const response = await api.post('/orders', orderData);
@@ -433,6 +453,11 @@ const CheckoutPage = () => {
                   label="VNPay"
                 />
                 <FormControlLabel
+                  value="paypal"
+                  control={<Radio />}
+                  label="PayPal"
+                />
+                <FormControlLabel
                   value="bank_transfer"
                   control={<Radio />}
                   label="Chuyển khoản ngân hàng"
@@ -463,6 +488,16 @@ const CheckoutPage = () => {
               <Alert severity="info" sx={{ mb: 3 }}>
                 <Typography variant="body2">
                   Thanh toán qua VNPay. Hỗ trợ thẻ ATM, Internet Banking, Visa/MasterCard.
+                </Typography>
+              </Alert>
+            )}
+
+            {formData.paymentMethod === 'paypal' && (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                <Typography variant="body2">
+                  Thanh toán qua PayPal. Hỗ trợ thẻ Visa/MasterCard quốc tế và ví PayPal. 
+                  <br />
+                  <strong>Lưu ý:</strong> Giá được quy đổi sang USD (tỷ giá ~24,000 VND/USD).
                 </Typography>
               </Alert>
             )}

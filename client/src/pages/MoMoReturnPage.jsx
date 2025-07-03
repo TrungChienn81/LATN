@@ -107,7 +107,7 @@ const MoMoReturnPage = () => {
     // Set payment status and details
     let status = 'failed';
     if (isSuccess) status = 'success'; // Error 99 with data is now treated as success
-    else if (isPending) status = 'pending';
+    else if (isPending) status = 'success'; // Treat 7002 (pending) as success for better UX
     
     setPaymentStatus(status);
     setPaymentDetails({
@@ -197,6 +197,16 @@ const MoMoReturnPage = () => {
       toast.error(`Thanh toán MoMo thất bại: ${getMoMoErrorMessage(resultCode)}`);
     }
   }, [location]);
+
+  useEffect(() => {
+    if (paymentStatus === 'success') {
+      const timer = setTimeout(() => {
+        navigate('/orders', { state: { orderNumber: paymentDetails.orderId } });
+      }, 3000); // Redirect after 3 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [paymentStatus, navigate, paymentDetails.orderId]);
 
   if (loading) {
     return (

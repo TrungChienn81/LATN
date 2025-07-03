@@ -40,8 +40,7 @@ const AdminDashboardPage = () => {
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/admin/dashboard/overview' }, 
     { text: 'Products', icon: <InventoryIcon />, path: '/admin/dashboard/products' }, 
-    { text: 'Orders', icon: <ShoppingCartIcon />, path: '/admin/dashboard/orders' },
-    { text: 'Payments', icon: <PaymentIcon />, path: '/admin/dashboard/payments' },
+    { text: 'Orders', icon: <PaymentIcon />, path: '/admin/dashboard/payments' },
     { text: 'Customers', icon: <PeopleIcon />, path: '/admin/dashboard/users' }, 
     { text: 'Settings', icon: <SettingsIcon />, path: '/admin/dashboard/settings' },
   ];

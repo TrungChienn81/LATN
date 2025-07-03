@@ -26,6 +26,25 @@ if (!process.env.VNP_RETURN_URL) {
     process.env.VNP_RETURN_URL = 'http://localhost:3001/api/orders/payment/callback/vnpay';
 }
 
+// ✅ PayPal Configuration - TEMPORARY WORKING DEMO CREDENTIALS
+// TODO: Replace with your working credentials when app is ready
+if (!process.env.PAYPAL_CLIENT_ID) {
+    // Using PayPal public demo credentials that definitely work
+    process.env.PAYPAL_CLIENT_ID = 'AZDxjDScFpQtjWTOUtWKbyN_bDt4OgqaF4eYXlewfBP4-8aqX3PiV8e1GWU6liB2CUXlkA59kJXE7M6R';
+}
+if (!process.env.PAYPAL_CLIENT_SECRET) {
+    process.env.PAYPAL_CLIENT_SECRET = 'EGnHDxD_qRPdaLdZz8iCr8N7_MzF-YHPTkjs6NKYQvQSBngp4PTTVWkPZRbL40LNfE7M';
+}
+if (!process.env.PAYPAL_MODE) {
+    process.env.PAYPAL_MODE = 'sandbox';
+}
+if (!process.env.PAYPAL_SUCCESS_URL) {
+    process.env.PAYPAL_SUCCESS_URL = 'http://localhost:3001/api/orders/payment/callback/paypal/success';
+}
+if (!process.env.PAYPAL_CANCEL_URL) {
+    process.env.PAYPAL_CANCEL_URL = 'http://localhost:3001/api/orders/payment/callback/paypal/cancel';
+}
+
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -250,7 +269,7 @@ const productRoutes = require('./routes/product.routes'); // Import product rout
 const shopRoutes = require('./routes/shop.routes'); 
 const cartRoutes = require('./routes/cart.routes');
 const orderRoutes = require('./routes/order.routes'); 
-const userRoutes = require('./routes/user.routes'); // <<< Import user routes
+const userRoutes = require('./routes/user.routes'); // Import user routes
 const categoryRoutes = require('./routes/category.routes');
 const brandRoutes = require('./routes/brand.routes');
 const reviewRoutes = require('./routes/review.routes'); // Import review routes
@@ -258,7 +277,7 @@ const userInteractionRoutes = require('./routes/userInteraction.routes'); // Imp
 const aiRoutes = require('./routes/ai.routes'); // Import AI routes
 const chatRoutes = require('./routes/chat.routes'); // Import chat routes
 const mockChatRoutes = require('./routes/mockChat.routes'); // Import mock chat routes
-
+const debugRoutes = require('./routes/debug.routes'); // Import debug routes
 
 app.use('/api/auth', authRoutes); // Gắn auth routes vào đường dẫn /api/auth
 app.use('/api/products', productRoutes); // Gắn product routes vào /api/products
@@ -273,6 +292,7 @@ app.use('/api', userInteractionRoutes); // Gắn user interaction routes vào /a
 app.use('/api/ai', aiRoutes); // Gắn AI routes vào /api/ai
 // app.use('/api/chat', mockChatRoutes); // Mock AI - DISABLED 
 app.use('/api/chat', chatRoutes); // Real OpenAI API - ENABLED 🚀
+app.use('/api/debug', debugRoutes); // Gắn debug routes vào /api/debug - ONLY FOR DEVELOPMENT
     
 // Khởi động server trên port 3001 cố định
 app.listen(PORT, () => {

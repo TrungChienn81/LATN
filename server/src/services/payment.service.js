@@ -3,6 +3,7 @@ const querystring = require('qs');
 const crypto = require('crypto');
 const sortObject = require('../utils/sortObject');
 const { createMoMoPaymentUrl } = require('../utils/momo');
+const { createPayPalOrder } = require('../utils/paypal');
 
 const createVnPayUrl = (req, order) => {
     process.env.TZ = 'Asia/Ho_Chi_Minh';
@@ -87,4 +88,23 @@ const createMoMoUrl = async (req, order) => {
     }
 };
 
-module.exports = { createVnPayUrl, createMoMoUrl }; 
+const createPayPalUrl = async (req, order) => {
+    const orderInfo = `Payment for order ${order.orderNumber}`;
+    const amount = order.totalAmount; // Amount in millions VND
+    const orderNumber = order.orderNumber;
+
+    try {
+        const result = await createPayPalOrder(orderInfo, amount, orderNumber);
+        if (!result.success) {
+            throw new Error('PayPal order creation failed');
+        }
+        return {
+            paymentUrl: result.paymentUrl,
+            paypalOrderId: result.paypalOrderId
+        };
+    } catch (error) {
+        throw new Error(`Không thể tạo URL thanh toán PayPal: ${error.message}`);
+    }
+};
+
+module.exports = { createVnPayUrl, createMoMoUrl, createPayPalUrl }; 

@@ -24,6 +24,7 @@ import RegisterPage from './pages/RegisterPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminOverview from './components/Admin/AdminOverview';
 import AdminUserManagement from './components/Admin/UserManagement/AdminUserManagement';
+import AdminOrderManagement from './components/Admin/OrderManagement/AdminOrderManagement';
 import AdminProductManagement from './components/Admin/ProductManagement/AdminProductManagement';
 import ProductDetailPage from './pages/ProductDetailPage';
 import CategoryManagement from './components/Admin/CategoryManagement';
@@ -61,6 +62,7 @@ import DemoPaymentPage from './pages/DemoPaymentPage';
 // Import Payment Return Pages
 import VNPayReturnPage from './pages/VNPayReturnPage';
 import MoMoReturnPage from './pages/MoMoReturnPage';
+import PayPalReturnPage from './pages/PayPalReturnPage';
 
 // Import Chat Provider
 import ChatProvider from './components/Chat/ChatProvider';
@@ -121,6 +123,7 @@ function App() {
             {/* Payment Return Pages */}
             <Route path="/vnpay-return" element={<VNPayReturnPage />} />
             <Route path="/momo-return" element={<MoMoReturnPage />} />
+            <Route path="/paypal-return" element={<PayPalReturnPage />} />
             
             {/* Shop Dashboard Routes */}
             <Route path="/my-shop/*" element={<ShopDashboardPage />}>
@@ -144,6 +147,7 @@ function App() {
                 <Route path="overview" element={<AdminOverview />} />
                 <Route path="users" element={<AdminUserManagement />} />
                 <Route path="products" element={<AdminProductManagement />} />
+                <Route path="orders" element={<AdminOrderManagement />} />
                 <Route path="payments" element={<PaymentManagement />} />
                 <Route path="categories" element={<CategoryManagement />} />
                 <Route path="brands" element={<BrandManagement />} />

@@ -264,19 +264,36 @@ const VNPayReturnPage = () => {
     });
     
     setLoading(false);
-  }, [location]);
-  
-  // Helper function to get error message based on response code
+
+    // Show toast notification
+    if (isSuccess) {
+      toast.success('Thanh toán VNPay thành công!');
+    } else {
+      toast.error(`Thanh toán VNPay thất bại: ${getErrorMessage(responseCode)}`);
+    }
+  }, [location, getErrorMessage]);
+
+  useEffect(() => {
+    if (paymentStatus === 'success') {
+      const timer = setTimeout(() => {
+        navigate('/orders', { state: { orderNumber: paymentDetails.vnp_TxnRef } });
+      }, 3000); // Redirect after 3 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [paymentStatus, navigate, paymentDetails.vnp_TxnRef]);
+
+  // Function to get a human-readable error message
   const getErrorMessage = (code) => {
     const errorMessages = {
       '00': 'Giao dịch thành công',
+      '07': 'Trừ tiền thành công. Giao dịch bị nghi ngờ (liên hệ VNPAY).',
       '01': 'Giao dịch đã tồn tại',
       '02': 'Merchant không hợp lệ',
       '03': 'Dữ liệu gửi sang không đúng định dạng',
       '04': 'Khởi tạo GD không thành công do Website đang bị tạm khóa',
       '05': 'Giao dịch không thành công do: Quý khách nhập sai mật khẩu quá số lần quy định',
       '06': 'Giao dịch không thành công do Quý khách nhập sai mật khẩu',
-      '07': 'Giao dịch bị nghi ngờ gian lận',
       '09': 'Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng bị khóa',
       '10': 'Giao dịch không thành công do: Quý khách nhập sai mã OTP',
       '11': 'Giao dịch không thành công do: Đã hết hạn chờ thanh toán',

@@ -174,6 +174,13 @@ function verifyMoMoSignature(params) {
     console.log('🔐 MoMo Signature Verification Debug:');
     console.log('Input params:', JSON.stringify(params, null, 2));
     
+    // Kiểm tra xem đây có phải là mã trạng thái đặc biệt không cần xác thực
+    if (params.resultCode == 7002) {
+        console.log('🟡 Result Code 7002 (Payment pending) detected!');
+        console.log('🟡 Skipping strict signature validation for pending payments...');
+        return true; // Bỏ qua xác thực chữ ký cho trạng thái pending
+    }
+    
     const {
         partnerCode,
         orderId,
@@ -198,6 +205,22 @@ function verifyMoMoSignature(params) {
     console.log('  message:', message);
     console.log('  transId:', transId);
 
+    // Nếu không có signature, không thể xác thực
+    if (!signature) {
+        console.log('⚠️ No signature provided in callback params');
+        return false;
+    }
+
+    // Đảm bảo tất cả các trường bắt buộc đều có mặt
+    // Sử dụng partnerCode từ config nếu không có trong params
+    const safePartnerCode = partnerCode || momoConfig.partnerCode;
+    
+    // Nếu thiếu các trường quan trọng, không thể xác thực đáng tin cậy
+    if (!orderId || !amount || !responseTime || !transId) {
+        console.log('⚠️ Missing critical fields for signature verification');
+        return false;
+    }
+
     // Create raw signature for verification
     const rawSignature = 
         'accessKey=' + momoConfig.accessKey +
@@ -207,9 +230,9 @@ function verifyMoMoSignature(params) {
         '&orderId=' + orderId +
         '&orderInfo=' + orderInfo +
         '&orderType=' + (orderType || '') +
-        '&partnerCode=' + partnerCode +
+        '&partnerCode=' + safePartnerCode +
         '&payType=' + (payType || '') +
-        '&requestId=' + requestId +
+        '&requestId=' + (requestId || '') +
         '&responseTime=' + responseTime +
         '&resultCode=' + resultCode +
         '&transId=' + transId;

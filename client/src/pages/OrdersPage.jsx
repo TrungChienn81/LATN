@@ -27,7 +27,19 @@ import {
   FormLabel,
   RadioGroup,
   FormControlLabel,
-  Radio
+  Radio,
+  Avatar,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  Checkbox,
+  IconButton,
+  Tooltip,
+  Menu,
+  MenuItem,
+  ButtonGroup,
+  Badge
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -37,7 +49,14 @@ import {
   Payment as PaymentIcon,
   MonetizationOn as MonetizationOnIcon,
   AccountBalance as BankIcon,
-  CreditCard as CardIcon
+  CreditCard as CardIcon,
+  Store as StoreIcon,
+  ShoppingBag as ShoppingBagIcon,
+  Delete as DeleteIcon,
+  DeleteSweep as DeleteSweepIcon,
+  DeleteForever as DeleteForeverIcon,
+  MoreVert as MoreVertIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { formatPriceToVND } from '../utils/formatters';
@@ -54,6 +73,12 @@ const OrdersPage = () => {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
   const [bankingDetails, setBankingDetails] = useState(null);
+  
+  // Các trạng thái cho chức năng xóa đơn hàng
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({ open: false, mode: null, orderIds: [] });
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null); // Cho menu hành động xóa
 
   // Get success message from navigation state
   const successOrderNumber = location.state?.orderNumber;
@@ -62,8 +87,39 @@ const OrdersPage = () => {
     if (successOrderNumber) {
       toast.success(`Đặt hàng thành công! Mã đơn hàng: ${successOrderNumber}`);
     }
+    
+    // Check if redirected from payment page
+    const searchParams = new URLSearchParams(location.search);
+    const paymentStatus = searchParams.get('payment_status');
+    const orderId = searchParams.get('order_id');
+    const paymentMethod = searchParams.get('payment_method');
+    
+    // Show payment result notification if available
+    if (paymentStatus) {
+      if (paymentStatus === 'success') {
+        toast.success(`Thanh toán ${paymentMethod ? 'qua ' + paymentMethod : ''} thành công!`);
+      } else if (paymentStatus === 'failed') {
+        toast.error(`Thanh toán ${paymentMethod ? 'qua ' + paymentMethod : ''} thất bại. Vui lòng thử lại.`);
+      } else if (paymentStatus === 'pending') {
+        toast.info(`Thanh toán ${paymentMethod ? 'qua ' + paymentMethod : ''} đang được xử lý.`);
+      }
+      
+      // Clear URL parameters without refreshing page
+      window.history.replaceState({}, document.title, '/user/orders');
+    }
+    
+    // Fetch orders
     fetchOrders();
-  }, []);
+    
+    // Setup auto-refresh for orders with pending payment status
+    const refreshInterval = setInterval(() => {
+      // Refresh orders regardless of status to ensure latest data
+      console.log('Auto-refreshing orders...');
+      fetchOrders();
+    }, 30000); // Check every 30 seconds
+    
+    return () => clearInterval(refreshInterval);
+  }, [location.search]); // Re-run when URL parameters change
 
   const fetchOrders = async (page = 1) => {
     try {
@@ -94,7 +150,10 @@ const OrdersPage = () => {
     return statusMap[status] || { label: status, color: 'default', icon: null };
   };
 
-  const getPaymentStatusInfo = (paymentStatus) => {
+  const getPaymentStatusInfo = (paymentStatus, orderStatus) => {
+    if (orderStatus === 'cancelled') {
+        return { label: 'Đã hủy', color: 'error', icon: <CancelIcon /> };
+    }
     const paymentStatusMap = {
       pending: { label: 'Chưa thanh toán', color: 'error', icon: <ScheduleIcon /> },
       paid: { label: 'Đã thanh toán', color: 'success', icon: <CheckCircleIcon /> },
@@ -110,7 +169,8 @@ const OrdersPage = () => {
       bank_transfer: { label: 'Chuyển khoản ngân hàng', icon: <BankIcon />, color: 'primary' },
       momo: { label: 'Ví MoMo', icon: <PaymentIcon />, color: 'secondary' },
       vnpay: { label: 'VNPay', icon: <CardIcon />, color: 'info' },
-      zalopay: { label: 'ZaloPay', icon: <PaymentIcon />, color: 'warning' }
+      zalopay: { label: 'ZaloPay', icon: <PaymentIcon />, color: 'warning' },
+      paypal: { label: 'PayPal', icon: <PaymentIcon />, color: 'info' }
     };
     return methodMap[paymentMethod] || { label: paymentMethod, icon: <PaymentIcon />, color: 'default' };
   };
@@ -177,6 +237,117 @@ const OrdersPage = () => {
     setSelectedPaymentMethod('');
     setBankingDetails(null);
   };
+  
+  // Hành động xóa đơn hàng
+  const handleOpenDeleteMenu = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseDeleteMenu = () => {
+    setAnchorEl(null);
+  };
+  
+  const handleSelectOrder = (orderId) => {
+    setSelectedOrders(prevSelected => {
+      if (prevSelected.includes(orderId)) {
+        return prevSelected.filter(id => id !== orderId);
+      } else {
+        return [...prevSelected, orderId];
+      }
+    });
+  };
+  
+  const handleSelectAllOrders = (event) => {
+    if (event.target.checked) {
+      // Chỉ chọn các đơn hàng đã hoàn thành, hủy hoặc thất bại
+      const selectableOrders = orders
+        .filter(order => ['completed', 'cancelled', 'failed'].includes(order.orderStatus))
+        .map(order => order._id);
+      setSelectedOrders(selectableOrders);
+    } else {
+      setSelectedOrders([]);
+    }
+  };
+  
+  const canDelete = (orderStatus) => {
+    return ['completed', 'cancelled', 'failed'].includes(orderStatus);
+  };
+  
+  const openDeleteConfirmDialog = (mode, orderIds = []) => {
+    setDeleteConfirmDialog({
+      open: true,
+      mode,
+      orderIds
+    });
+  };
+  
+  const closeDeleteConfirmDialog = () => {
+    setDeleteConfirmDialog({
+      open: false,
+      mode: null,
+      orderIds: []
+    });
+  };
+  
+  const handleDeleteSingleOrder = (orderId) => {
+    openDeleteConfirmDialog('single', [orderId]);
+  };
+  
+  const handleDeleteMultipleOrders = () => {
+    if (selectedOrders.length === 0) {
+      toast.warning('Vui lòng chọn ít nhất một đơn hàng để xóa');
+      return;
+    }
+    openDeleteConfirmDialog('multiple', selectedOrders);
+    handleCloseDeleteMenu();
+  };
+  
+  const handleDeleteAllOrders = () => {
+    // Kiểm tra xem có đơn hàng đủ điều kiện để xóa không
+    const deletableOrders = orders.filter(order => canDelete(order.orderStatus));
+    if (deletableOrders.length === 0) {
+      toast.warning('Không có đơn hàng nào có thể xóa');
+      return;
+    }
+    openDeleteConfirmDialog('all');
+    handleCloseDeleteMenu();
+  };
+  
+  const confirmDelete = async () => {
+    try {
+      setDeleteLoading(true);
+      const { mode, orderIds } = deleteConfirmDialog;
+      
+      let response;
+      switch (mode) {
+        case 'single':
+          response = await api.delete(`/orders/${orderIds[0]}`);
+          break;
+        case 'multiple':
+          response = await api.delete('/orders/multiple', {
+            data: { orderIds }
+          });
+          break;
+        case 'all':
+          response = await api.delete('/orders/all');
+          break;
+      }
+      
+      if (response.data.success) {
+        toast.success(response.data.message);
+        fetchOrders(); // Làm mới danh sách đơn hàng
+        setSelectedOrders([]); // Xóa các lựa chọn
+      } else {
+        toast.error(response.data.message || 'Có lỗi xảy ra khi xóa đơn hàng');
+      }
+    } catch (error) {
+      console.error('Lỗi khi xóa đơn hàng:', error);
+      toast.error(error.response?.data?.message || 'Không thể xóa đơn hàng. Vui lòng thử lại sau.');
+    } finally {
+      setDeleteLoading(false);
+      closeDeleteConfirmDialog();
+    }
+  };
 
   if (loading) {
     return (
@@ -187,10 +358,39 @@ const OrdersPage = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        Đơn hàng của tôi
-      </Typography>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h4" gutterBottom>
+          Đơn hàng của tôi
+        </Typography>
+        
+        <Box>
+          <ButtonGroup variant="outlined" color="primary">
+            <Button
+              startIcon={<DeleteSweepIcon />}
+              onClick={handleDeleteMultipleOrders}
+              disabled={selectedOrders.length === 0}
+            >
+              Xóa đã chọn ({selectedOrders.length})
+            </Button>
+            
+            <Button onClick={handleOpenDeleteMenu}>
+              <MoreVertIcon />
+            </Button>
+          </ButtonGroup>
+          
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={handleCloseDeleteMenu}
+          >
+            <MenuItem onClick={handleDeleteAllOrders}>
+              <DeleteForeverIcon fontSize="small" sx={{ mr: 1 }} />
+              Xóa tất cả đơn hàng đã hủy/hoàn thành
+            </MenuItem>
+          </Menu>
+        </Box>
+      </Box>
 
       {successOrderNumber && (
         <Alert severity="success" sx={{ mb: 3 }}>
@@ -227,13 +427,23 @@ const OrdersPage = () => {
         <Grid container spacing={3}>
           {orders.map((order) => {
             const statusInfo = getStatusInfo(order.orderStatus);
-            const paymentStatusInfo = getPaymentStatusInfo(order.paymentStatus);
+            const paymentStatusInfo = getPaymentStatusInfo(order.paymentStatus, order.orderStatus);
             const paymentMethodInfo = getPaymentMethodInfo(order.paymentMethod);
             
             return (
               <Grid item xs={12} key={order._id}>
-                <Card sx={{ boxShadow: 2 }}>
-                  <CardContent sx={{ p: 3 }}>
+                <Card sx={{ boxShadow: 2, position: 'relative' }}>
+                  {canDelete(order.orderStatus) && (
+                    <Box sx={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}>
+                      <Checkbox
+                        checked={selectedOrders.includes(order._id)}
+                        onChange={() => handleSelectOrder(order._id)}
+                        color="primary"
+                        disabled={!canDelete(order.orderStatus)}
+                      />
+                    </Box>
+                  )}
+                  <CardContent sx={{ p: 3, pl: canDelete(order.orderStatus) ? 5 : 3 }}>
                     {/* Order Header */}
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                       <Box>
@@ -241,162 +451,198 @@ const OrdersPage = () => {
                           Đơn hàng #{order.orderNumber}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          Ngày đặt: {new Date(order.createdAt).toLocaleDateString('vi-VN', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          Ngày đặt: {new Date(order.createdAt).toLocaleString()}
                         </Typography>
                       </Box>
-                      
-                      <Box sx={{ textAlign: 'right' }}>
-                        {/* Status Chips */}
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 1 }}>
+                      {/* Statuses */}
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
                         <Chip
                           icon={statusInfo.icon}
                           label={statusInfo.label}
                           color={statusInfo.color}
-                          variant="outlined"
-                            size="small"
-                          />
-                          <Chip
-                            icon={paymentStatusInfo.icon}
-                            label={paymentStatusInfo.label}
-                            color={paymentStatusInfo.color}
-                            variant="filled"
-                            size="small"
-                          />
-                        </Box>
-                        <Typography variant="h6" color="primary">
+                          size="small"
+                        />
+                         <Chip
+                          icon={paymentStatusInfo.icon}
+                          label={paymentStatusInfo.label}
+                          color={paymentStatusInfo.color}
+                          size="small"
+                        />
+                        <Typography variant="h6" color="error.main" sx={{ fontWeight: 'bold' }}>
                           {formatPriceToVND(order.totalAmount)}
                         </Typography>
                       </Box>
                     </Box>
 
+                    <Divider sx={{ my: 2 }} />
+
                     {/* Payment Method */}
-                    <Box sx={{ mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <Typography variant="subtitle2" sx={{ mr: 2, fontWeight: 'bold' }}>
+                        Phương thức thanh toán:
+                      </Typography>
                       <Chip
                         icon={paymentMethodInfo.icon}
                         label={paymentMethodInfo.label}
-                        color={paymentMethodInfo.color}
                         variant="outlined"
+                        color={paymentMethodInfo.color}
                         size="small"
                       />
                     </Box>
 
-                    <Divider sx={{ my: 2 }} />
-
-                    {/* Order Items */}
-                    <Typography variant="subtitle1" gutterBottom>
+                    {/* Product List */}
+                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
                       Sản phẩm đã đặt:
                     </Typography>
-                    
-                    <TableContainer>
+                    <TableContainer component={Paper} elevation={0} variant="outlined" sx={{ mb: 2 }}>
                       <Table size="small">
                         <TableHead>
                           <TableRow>
                             <TableCell>Sản phẩm</TableCell>
-                            <TableCell align="center">Số lượng</TableCell>
+                            <TableCell align="right">Số lượng</TableCell>
                             <TableCell align="right">Đơn giá</TableCell>
                             <TableCell align="right">Thành tiền</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {order.items.map((item, index) => (
-                            <TableRow key={index}>
+                          {order.items.map((item) => (
+                            <TableRow key={item.product._id}>
                               <TableCell>
                                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                  <Box sx={{ mr: 2 }}>
-                                    <img
-                                      src={item.productImage || '/placeholder-image.jpg'}
-                                      alt={item.productName}
-                                      style={{
-                                        width: 50,
-                                        height: 50,
-                                        objectFit: 'contain',
-                                        borderRadius: 4
-                                      }}
-                                    />
-                                  </Box>
+                                  <Avatar
+                                    src={item.product.images[0]}
+                                    variant="rounded"
+                                    sx={{ mr: 1, width: 40, height: 40, backgroundColor: '#f0f0f0' }}
+                                  >
+                                    <ShoppingBagIcon />
+                                  </Avatar>
                                   <Box>
-                                    <Typography variant="body2" fontWeight="medium">
-                                      {item.productName}
+                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                      {item.product.name}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                      Shop: {item.shopName}
+                                      Shop: {item.shop.name}
                                     </Typography>
                                   </Box>
                                 </Box>
                               </TableCell>
-                              <TableCell align="center">{item.quantity}</TableCell>
+                              <TableCell align="right">{item.quantity}</TableCell>
                               <TableCell align="right">{formatPriceToVND(item.price)}</TableCell>
-                              <TableCell align="right">{formatPriceToVND(item.totalPrice)}</TableCell>
+                              <TableCell align="right">{formatPriceToVND(item.quantity * item.price)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
                       </Table>
                     </TableContainer>
 
-                    <Divider sx={{ my: 2 }} />
+                    {/* Shops in Order */}
+                    <Box sx={{ mb: 2 }}>
+                       <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                        Các cửa hàng trong đơn hàng:
+                      </Typography>
+                      <List disablePadding>
+                        {order.shops.map((shop) => {
+                          const shopTotal = order.items
+                            .filter((item) => item.shop._id === shop._id)
+                            .reduce((acc, item) => acc + item.price * item.quantity, 0);
 
-                    {/* Shipping Address */}
-                    <Typography variant="subtitle2" gutterBottom>
-                      Địa chỉ giao hàng:
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {order.shippingAddress.fullName} - {order.shippingAddress.phoneNumber}
-                      <br />
-                      {order.shippingAddress.address.street}, {order.shippingAddress.address.ward}, {order.shippingAddress.address.district}, {order.shippingAddress.address.city}
-                    </Typography>
+                          return (
+                            <ListItem
+                              key={shop._id}
+                              sx={{
+                                p: 2,
+                                mb: 1,
+                                borderRadius: 1,
+                                border: '1px solid #e0e0e0'
+                              }}
+                              secondaryAction={
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={() => console.log('Shop details clicked')}
+                                >
+                                  Chi tiết
+                                </Button>
+                              }
+                            >
+                              <ListItemAvatar>
+                                <Avatar src={shop.logo || ''}>
+                                  <StoreIcon />
+                                </Avatar>
+                              </ListItemAvatar>
+                              <ListItemText
+                                primary={shop.name}
+                                secondary={`${order.items.filter(item => item.shop._id === shop._id).length} sản phẩm - ${formatPriceToVND(shopTotal)}`}
+                              />
+                            </ListItem>
+                          );
+                        })}
+                      </List>
+                    </Box>
 
-                    {/* Order Notes */}
-                    {order.notes && (
-                      <>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Ghi chú:
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                          {order.notes}
-                        </Typography>
-                      </>
-                    )}
+                    {/* Shipping Info */}
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                        Địa chỉ giao hàng:
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {order.shippingAddress.fullName} - {order.shippingAddress.phoneNumber}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {order.shippingAddress.address.street}, {order.shippingAddress.address.ward}, {order.shippingAddress.address.district}, {order.shippingAddress.address.city}
+                      </Typography>
+                    </Box>
 
                     {/* Order Actions */}
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
-                      {order.orderStatus === 'pending' && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        {order.paymentStatus === 'paid' && order.orderStatus === 'delivered' && (
+                          <Button variant="contained" color="primary">
+                            Đánh giá sản phẩm
+                          </Button>
+                        )}
+                        
+                        {canDelete(order.orderStatus) && (
+                          <Button 
+                            variant="outlined" 
+                            color="error"
+                            startIcon={<DeleteIcon />}
+                            onClick={() => handleDeleteSingleOrder(order._id)}
+                          >
+                            Xóa đơn hàng
+                          </Button>
+                        )}
+                        
                         <Button
                           variant="outlined"
-                          color="error"
-                          onClick={() => handleCancelOrder(order._id)}
+                          color="primary"
+                          onClick={() => console.log('Xem chi tiết đơn hàng:', order._id)}
                         >
-                          Hủy đơn hàng
+                          Xem chi tiết
                         </Button>
-                      )}
-                      
-                      {/* Payment Button - Show if payment is pending and order is not COD */}
-                      {order.paymentStatus === 'pending' && order.paymentMethod !== 'cod' && 
-                       ['pending', 'confirmed'].includes(order.orderStatus) && (
-                        <Button
-                          variant="contained"
-                          color="success"
-                          startIcon={<PaymentIcon />}
-                          onClick={() => handlePaymentNow(order)}
-                        >
-                          Thanh toán ngay
-                        </Button>
-                      )}
-                      
-                      <Button variant="outlined">
-                        Xem chi tiết
-                      </Button>
-                      
-                      {order.orderStatus === 'delivered' && (
-                        <Button variant="contained">
-                          Đánh giá
-                        </Button>
-                      )}
+                      </Box>
+                      {/* Action Buttons */}
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        {order.orderStatus === 'pending' && order.paymentStatus !== 'paid' && (
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            onClick={() => handleCancelOrder(order._id)}
+                          >
+                            Hủy đơn hàng
+                          </Button>
+                        )}
+                        {order.paymentMethod !== 'cod' && order.paymentStatus === 'pending' && order.orderStatus !== 'cancelled' && (
+                          <Button
+                            variant="contained"
+                            color="success"
+                            startIcon={<PaymentIcon />}
+                            onClick={() => handlePaymentNow(order)}
+                          >
+                            Thanh toán ngay
+                          </Button>
+                        )}
+                      </Box>
                     </Box>
                   </CardContent>
                 </Card>
@@ -618,6 +864,42 @@ const OrdersPage = () => {
               {processingPayment ? <CircularProgress size={20} /> : 'Thanh toán'}
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+      
+      {/* Dialog xác nhận xóa đơn hàng */}
+      <Dialog open={deleteConfirmDialog.open} onClose={closeDeleteConfirmDialog}>
+        <DialogTitle sx={{ bgcolor: 'error.light', color: 'error.contrastText' }}>
+          <Box display="flex" alignItems="center">
+            <WarningIcon sx={{ mr: 1 }} />
+            Xác nhận xóa
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <Typography variant="body1">
+            {deleteConfirmDialog.mode === 'single' && 'Bạn có chắc chắn muốn xóa đơn hàng này?'}
+            {deleteConfirmDialog.mode === 'multiple' && `Bạn có chắc chắn muốn xóa ${deleteConfirmDialog.orderIds.length} đơn hàng đã chọn?`}
+            {deleteConfirmDialog.mode === 'all' && 'Bạn có chắc chắn muốn xóa tất cả đơn hàng đã hủy hoặc hoàn thành?'}
+          </Typography>
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              Lưu ý: Đây là hành động không thể hoàn tác. Dữ liệu đã xóa không thể khôi phục.
+            </Typography>
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDeleteConfirmDialog}>
+            Hủy bỏ
+          </Button>
+          <Button 
+            variant="contained" 
+            color="error" 
+            onClick={confirmDelete}
+            disabled={deleteLoading}
+            startIcon={deleteLoading ? <CircularProgress size={20} color="inherit" /> : <DeleteIcon />}
+          >
+            {deleteLoading ? 'Đang xóa...' : 'Xóa'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Container>

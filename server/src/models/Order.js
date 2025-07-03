@@ -81,7 +81,7 @@ const orderSchema = new Schema({
   // Thông tin thanh toán
   paymentMethod: {
     type: String,
-    enum: ['cod', 'bank_transfer', 'momo', 'zalopay', 'vnpay'],
+    enum: ['cod', 'bank_transfer', 'momo', 'zalopay', 'vnpay', 'paypal'],
     default: 'cod'
   },
   paymentStatus: {

@@ -2,17 +2,22 @@ const crypto = require('crypto');
 const moment = require('moment');
 const querystring = require('qs');
 
-// VNPay Configuration - LOCALTUNNEL MODE
+/**
+ * VNPay Configuration
+ * Sử dụng biến môi trường để dễ dàng thay đổi cấu hình
+ * VNP_TMN_CODE: Mã đơn vị merchant đăng ký với VNPay
+ * VNP_HASH_SECRET: Chuỗi bí mật để tạo chữ ký
+ * VNP_URL: URL cổng thanh toán VNPay
+ * VNP_RETURN_URL: URL callback khi thanh toán hoàn tất
+ */
 const vnpayConfig = {
-    // User's REAL merchant credentials
-    tmnCode: 'KP8TH6X1',
-    hashSecret: 'F4RW2ALGSECLO0HUVEMVNBCJ4SRD8LKJ',
-    url: 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
-    
-    // LOCALTUNNEL MODE - Public URL for VNPay callback
-    returnUrl: 'https://vnpay-latn-shop.loca.lt/api/orders/payment/callback/vnpay',
-    frontendReturnUrl: 'http://localhost:5173/vnpay-return',
-    
+    // Sử dụng các giá trị từ biến môi trường
+    tmnCode: process.env.VNP_TMN_CODE,
+    hashSecret: process.env.VNP_HASH_SECRET,
+    url: process.env.VNP_URL,
+    returnUrl: process.env.VNP_RETURN_URL,
+    frontendReturnUrl: process.env.FRONTEND_RETURN_URL || 'http://localhost:5173/user/orders',
+    hashAlgorithm: 'SHA512', // Thêm thuật toán băm rõ ràng
     version: '2.1.0'
 };
 
@@ -65,9 +70,10 @@ function createPaymentUrl(orderInfo, amount, orderNumber, ipAddr, locale = 'vn')
     console.log('Sign data (querystring):', signData);
     
     // Generate signature using HMAC-SHA512 with proper encoding
+    // Sửa: Không sử dụng Buffer.from vì VNPay yêu cầu chuỗi trực tiếp
     const signature = crypto
         .createHmac('sha512', vnpayConfig.hashSecret)
-        .update(Buffer.from(signData, 'utf-8'))
+        .update(signData)
         .digest('hex');
     
     console.log('Generated signature:', signature);
