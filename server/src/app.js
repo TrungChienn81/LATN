@@ -1,48 +1,53 @@
 // Load environment variables
 require('dotenv').config();
 
-// Set environment variables manually as fallback
+// Load API keys from config file
+const apiKeys = require('../config/api-keys');
+
+// Set environment variables from config file if not set in .env
+if (!process.env.OPENAI_API_KEY) {
+    process.env.OPENAI_API_KEY = apiKeys.OPENAI_API_KEY;
+}
 if (!process.env.JWT_SECRET) {
-    process.env.JWT_SECRET = 'your-super-secret-jwt-key-here-change-this-in-production';
+    process.env.JWT_SECRET = apiKeys.JWT_SECRET;
 }
 if (!process.env.MONGODB_URI) {
-    process.env.MONGODB_URI = 'mongodb+srv://TrungChienn:Chien123@latn.af6hwio.mongodb.net/LATNShop08?retryWrites=true&w=majority&appName=LATN';
+    process.env.MONGODB_URI = apiKeys.MONGODB_URI;
 }
 if (!process.env.PORT) {
-    process.env.PORT = '3001';
+    process.env.PORT = apiKeys.PORT;
 }
 
 // ✅ VNPay Configuration - FIXED
 if (!process.env.VNP_TMN_CODE) {
-    process.env.VNP_TMN_CODE = 'KP8TH6X1';
+    process.env.VNP_TMN_CODE = apiKeys.VNP_TMN_CODE;
 }
 if (!process.env.VNP_HASH_SECRET) {
-    process.env.VNP_HASH_SECRET = 'F4RW2ALGSECLO0HUVEMVNBCJ4SRD8LKJ';
+    process.env.VNP_HASH_SECRET = apiKeys.VNP_HASH_SECRET;
 }
 if (!process.env.VNP_URL) {
-    process.env.VNP_URL = 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
+    process.env.VNP_URL = apiKeys.VNP_URL;
 }
 if (!process.env.VNP_RETURN_URL) {
-    process.env.VNP_RETURN_URL = 'http://localhost:3001/api/orders/payment/callback/vnpay';
+    process.env.VNP_RETURN_URL = apiKeys.VNP_RETURN_URL;
 }
 
 // ✅ PayPal Configuration - TEMPORARY WORKING DEMO CREDENTIALS
 // TODO: Replace with your working credentials when app is ready
 if (!process.env.PAYPAL_CLIENT_ID) {
-    // Using PayPal public demo credentials that definitely work
-    process.env.PAYPAL_CLIENT_ID = 'AZDxjDScFpQtjWTOUtWKbyN_bDt4OgqaF4eYXlewfBP4-8aqX3PiV8e1GWU6liB2CUXlkA59kJXE7M6R';
+    process.env.PAYPAL_CLIENT_ID = apiKeys.PAYPAL_CLIENT_ID;
 }
 if (!process.env.PAYPAL_CLIENT_SECRET) {
-    process.env.PAYPAL_CLIENT_SECRET = 'EGnHDxD_qRPdaLdZz8iCr8N7_MzF-YHPTkjs6NKYQvQSBngp4PTTVWkPZRbL40LNfE7M';
+    process.env.PAYPAL_CLIENT_SECRET = apiKeys.PAYPAL_CLIENT_SECRET;
 }
 if (!process.env.PAYPAL_MODE) {
-    process.env.PAYPAL_MODE = 'sandbox';
+    process.env.PAYPAL_MODE = apiKeys.PAYPAL_MODE;
 }
 if (!process.env.PAYPAL_SUCCESS_URL) {
-    process.env.PAYPAL_SUCCESS_URL = 'http://localhost:3001/api/orders/payment/callback/paypal/success';
+    process.env.PAYPAL_SUCCESS_URL = apiKeys.PAYPAL_SUCCESS_URL;
 }
 if (!process.env.PAYPAL_CANCEL_URL) {
-    process.env.PAYPAL_CANCEL_URL = 'http://localhost:3001/api/orders/payment/callback/paypal/cancel';
+    process.env.PAYPAL_CANCEL_URL = apiKeys.PAYPAL_CANCEL_URL;
 }
 
 

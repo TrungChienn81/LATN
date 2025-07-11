@@ -134,7 +134,7 @@ const RAGTestPage = () => {
     }
   };
 
-  const OPENAI_API_KEY = "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";
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
   // Test a specific query
   const runTestQuery = async (query) => {
     setLoading(true);
