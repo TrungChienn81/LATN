@@ -8,6 +8,7 @@ const Category = require('../models/Category');
 const Brand = require('../models/Brand');
 const catchAsync = require('../utils/catchAsync');
 const { v4: uuidv4 } = require('uuid');
+const productInfoPatterns = require('../prompts/product_info_patterns');
 
 // Token counting for cost monitoring
 let totalTokensUsed = 0;
@@ -122,7 +123,7 @@ exports.createChatSession = catchAsync(async (req, res) => {
 exports.sendMessage = catchAsync(async (req, res) => {
     try {
         const { sessionId, message, userId } = req.body;
-
+        const openAIApiKey = req.headers['x-openai-api-key'] || process.env.OPENAI_API_KEY;
         if (!sessionId || !message) {
             return res.status(400).json({
                 success: false,
@@ -162,8 +163,8 @@ exports.sendMessage = catchAsync(async (req, res) => {
             });
         }
 
-        // Generate AI response using RAG
-        const aiResponse = await generateRAGResponse(message, context, chatHistory);
+        // Generate AI response using RAG, truyền key động
+        const aiResponse = await generateRAGResponse(message, context, chatHistory, openAIApiKey);
 
         // Calculate cost for this request
         const fullInputText = `${JSON.stringify(context)}${chatHistory}${message}`;
@@ -442,14 +443,118 @@ async function getRelevantContext(query) {
             return uniqueProducts.slice(0, 5);
         }
         
+        // Nếu query chứa 'giá bao nhiêu', 'giá', 'mua ở đâu', ... thì tách tên sản phẩm phía trước để tìm
+        const priceKeywords = ['giá bao nhiêu', 'giá', 'mua ở đâu', 'có tốt không', 'có không', 'ở đâu', 'có hàng không'];
+        let productNamePart = query;
+        for (const kw of priceKeywords) {
+            const idx = queryLower.indexOf(kw);
+            if (idx > 0) {
+                productNamePart = query.substring(0, idx).trim();
+                break;
+            }
+        }
+        if (productNamePart !== query) {
+            console.log('🔍 Trying to search by product name part:', productNamePart);
+            const nameMatches = await Product.find({
+                name: { $regex: productNamePart, $options: 'i' }
+            })
+            .populate('category', 'name')
+            .populate('brand', 'name')
+            .populate({
+                path: 'shopId',
+                select: 'shopName ownerId status rating',
+                populate: {
+                    path: 'ownerId',
+                    select: 'firstName lastName name username email',
+                    model: 'User'
+                }
+            });
+            if (nameMatches.length > 0) {
+                console.log(`✅ Found ${nameMatches.length} products by product name part`);
+                return nameMatches.slice(0, 5);
+            }
+        }
+        // Nếu vẫn không tìm thấy, thử tìm theo tên sản phẩm đầy đủ (không phân biệt hoa thường)
+        console.log('🔄 No identifier matches, trying full product name search...');
+        const nameMatches = await Product.find({
+            name: { $regex: query.trim(), $options: 'i' }
+        })
+        .populate('category', 'name')
+        .populate('brand', 'name')
+        .populate({
+            path: 'shopId',
+            select: 'shopName ownerId status rating',
+            populate: {
+                path: 'ownerId',
+                select: 'firstName lastName name username email',
+                model: 'User'
+            }
+        });
+        if (nameMatches.length > 0) {
+            console.log(`✅ Found ${nameMatches.length} products by full name search`);
+            return nameMatches.slice(0, 5);
+        }
         // Fallback: If no specific products found, return trending
             console.log('🔄 No specific matches, returning trending products');
             return await Product.find({})
                 .populate('category', 'name')
                 .populate('brand', 'name')
-                .populate('shopId', 'shopName')
+                .populate({
+                    path: 'shopId',
+                    select: 'shopName ownerId status rating',
+                    populate: {
+                        path: 'ownerId',
+                        select: 'firstName lastName name username email',
+                        model: 'User'
+                    }
+                })
                 .sort({ createdAt: -1 })
                 .limit(5);
+
+        // Check for special info prompt (card, cpu, ram, etc.)
+        for (const pattern of productInfoPatterns) {
+            if (pattern.keywords.some(kw => queryLower.includes(kw))) {
+                // Tìm sản phẩm theo tên như logic cũ
+                const nameMatches = await Product.find({
+                    name: { $regex: query.trim().replace(/[^\w\s\-]/gi, ''), $options: 'i' }
+                })
+                .populate('category', 'name')
+                .populate('brand', 'name')
+                .populate({
+                    path: 'shopId',
+                    select: 'shopName ownerId status rating',
+                    populate: {
+                        path: 'ownerId',
+                        select: 'firstName lastName name username email',
+                        model: 'User'
+                    }
+                });
+                if (nameMatches.length > 0) {
+                    // Ưu tiên trả về context chỉ chứa thông số đặc biệt
+                    const product = nameMatches[0];
+                    let info = '';
+                    // Ưu tiên lấy từ description, nếu có specifications thì lấy cả ở đó
+                    if (product.description) {
+                        const match = product.description.match(pattern.regex);
+                        if (match) info = match[0];
+                    }
+                    if (!info && product.specifications) {
+                        const specStr = JSON.stringify(product.specifications);
+                        const match = specStr.match(pattern.regex);
+                        if (match) info = match[0];
+                    }
+                    // Nếu tìm thấy thông số, trả về context chỉ chứa thông số đó
+                    if (info) {
+                        return [{
+                            ...product.toObject(),
+                            _specialInfo: `${pattern.label}: ${info}`
+                        }];
+                    }
+                    // Nếu không tìm thấy, trả về context đầy đủ như cũ
+                    return nameMatches.slice(0, 5);
+                }
+            }
+        }
 
     } catch (error) {
         console.error('Error getting relevant context:', error);
@@ -581,32 +686,38 @@ function formatProductContext(products) {
     if (!products || products.length === 0) {
         return "Không có sản phẩm nào phù hợp trong cơ sở dữ liệu.";
     }
+    // Nếu có _specialInfo thì trả về thông tin đó ưu tiên
+    if (products[0]._specialInfo) {
+        return products[0]._specialInfo;
+    }
     
     return products.map((product, index) => {
-        // Smart brand name extraction
         let brandName = product.brand?.name;
-        
-        // If no brand from database, extract from product name
         if (!brandName && product.name) {
             brandName = extractBrandFromProductName(product.name);
         }
-        
-        // Final fallback
         if (!brandName) {
             brandName = 'Chưa xác định thương hiệu';
         }
-        
         const categoryName = product.category?.name || 'Không rõ danh mục';
         const shopName = product.shopId?.shopName || 'Không rõ cửa hàng';
+        const shopOwnerName = product.shopId?.ownerId ?
+            ((product.shopId.ownerId.firstName || '') + ' ' + (product.shopId.ownerId.lastName || '')).trim() ||
+            product.shopId.ownerId.name ||
+            product.shopId.ownerId.username ||
+            product.shopId.ownerId.email ||
+            'Không rõ chủ shop'
+            : 'Không rõ chủ shop';
         const price = product.price ? `${(product.price * 1000000).toLocaleString('vi-VN')}đ` : 'Liên hệ';
-        const stock = product.stock || 0;
-        
+        const stock = typeof product.stockQuantity === 'number' ? product.stockQuantity : (product.stock || 0);
+        const stockStatus = stock > 0 ? `Còn ${stock} sản phẩm` : 'Đã hết hàng';
+        const shopDisplay = stock > 0 ? `${shopName} (Còn ${stock} sản phẩm)` : `${shopName} (Đã hết hàng)`;
         return `${index + 1}. TÊN: ${product.name}
    THƯƠNG HIỆU: ${brandName}
-   DANH MỤC: ${categoryName} 
+   DANH MỤC: ${categoryName}
    GIÁ: ${price}
-   TÌNH TRẠNG: ${stock > 0 ? 'Còn hàng' : 'Hết hàng'} (${stock} sản phẩm)
-   CỬA HÀNG: ${shopName}
+   SHOP: ${shopDisplay}
+   CHỦ SHOP: ${shopOwnerName}
    MÔ TẢ: ${product.description || 'Không có mô tả'}
    ---`;
     }).join('\n');
@@ -649,7 +760,7 @@ function extractBrandFromProductName(productName) {
     return null;
 }
 
-async function generateRAGResponse(question, context, chatHistory) {
+async function generateRAGResponse(question, context, chatHistory, openAIApiKey) {
     try {
         console.log('🤖 Generating AI response for:', question);
         console.log('📦 Context products:', context.length);
@@ -658,6 +769,15 @@ async function generateRAGResponse(question, context, chatHistory) {
         const contextText = formatProductContext(context);
         
         console.log('📄 Formatted context length:', contextText.length);
+
+        // Tạo ChatOpenAI instance động theo key
+        const chatModel = new ChatOpenAI({
+            openAIApiKey: openAIApiKey,
+            modelName: 'gpt-4o-mini',
+            temperature: 0.3,
+            maxTokens: 150,
+            streaming: false
+        });
 
         // Create the RAG chain
         const ragChain = RunnableSequence.from([

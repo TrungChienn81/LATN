@@ -128,6 +128,7 @@ const ProductList = ({ onEditProduct, refreshCounter }) => {
               <TableCell sx={{ fontWeight: 'bold' }}>Tên Sản phẩm</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Danh mục</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Giá</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>Chủ shop</TableCell>
               <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Tồn kho</TableCell>
               <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Hành động</TableCell>
             </TableRow>
@@ -171,7 +172,12 @@ const ProductList = ({ onEditProduct, refreshCounter }) => {
                 </TableCell>
                 <TableCell>{product.categoryName || 'N/A'}</TableCell>
                 <TableCell>{formatCurrency(product.price)}</TableCell>
-                <TableCell align="center">{product.stockQuantity || 0}</TableCell>
+                <TableCell>{product.shopOwnerName || 'N/A'}</TableCell>
+                <TableCell align="center">
+                  <Typography color={product.stockStatus === 'Hết hàng' ? 'error' : 'text.primary'}>
+                    {product.stockStatus || (product.stockQuantity > 0 ? `Còn ${product.stockQuantity} sản phẩm` : 'Hết hàng')}
+                  </Typography>
+                </TableCell>
                 <TableCell align="center">
                   <Tooltip title="Sửa">
                     <IconButton size="small" onClick={() => handleEdit(product)} sx={{ mr: 0.5 }}>

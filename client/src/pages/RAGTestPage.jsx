@@ -134,6 +134,7 @@ const RAGTestPage = () => {
     }
   };
 
+  const OPENAI_API_KEY = "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";
   // Test a specific query
   const runTestQuery = async (query) => {
     setLoading(true);
@@ -144,7 +145,9 @@ const RAGTestPage = () => {
     
     try {
       // Create chat session
-      const sessionResponse = await api.post('/chat/session');
+      const sessionResponse = await api.post('/chat/session', {}, {
+        headers: { 'x-openai-api-key': OPENAI_API_KEY }
+      });
       if (!sessionResponse.data.success) {
         throw new Error('Failed to create session');
       }
@@ -155,6 +158,8 @@ const RAGTestPage = () => {
       const messageResponse = await api.post('/chat/message', {
         sessionId,
         message: query
+      }, {
+        headers: { 'x-openai-api-key': OPENAI_API_KEY }
       });
 
       if (messageResponse.data.success) {

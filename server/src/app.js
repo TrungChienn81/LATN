@@ -66,7 +66,7 @@ const corsOptions = {
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-openai-api-key']
 };
 
 app.use(cors(corsOptions));

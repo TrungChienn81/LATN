@@ -224,7 +224,15 @@ exports.getAllProducts = async (req, res, next) => {
     let query = Product.find(JSON.parse(queryStr))
       .skip(skip)
       .limit(limit)
-      .populate('shopId', 'shopName ownerId status rating');
+      .populate({
+        path: 'shopId',
+        select: 'shopName ownerId status rating',
+        populate: {
+          path: 'ownerId',
+          select: 'firstName lastName name username email',
+          model: 'User'
+        }
+      });
     
     // Xử lý filter theo tên category (cho gaming hoặc category khác)
     if (req.query.categoryName) {
@@ -321,7 +329,7 @@ exports.getAllProducts = async (req, res, next) => {
     
     // Map products để có trường shop thay vì shopId
     const formattedProducts = products.map(product => {
-      const productObj = product.toObject();
+      const productObj = product.toObject ? product.toObject() : product;
       
       // Handle shop information
       if (productObj.shopId) {
@@ -346,6 +354,32 @@ exports.getAllProducts = async (req, res, next) => {
         };
         productObj.shopName = 'Shop không xác định';
       }
+      
+      // Lấy tên chủ shop
+      let shopOwnerName = '';
+      if (productObj.shopId && productObj.shopId.ownerId) {
+        const owner = productObj.shopId.ownerId;
+        if (owner.firstName || owner.lastName) {
+          shopOwnerName = `${owner.firstName || ''} ${owner.lastName || ''}`.trim();
+        } else if (owner.name) {
+          shopOwnerName = owner.name;
+        } else if (owner.username) {
+          shopOwnerName = owner.username;
+        } else if (owner.email) {
+          shopOwnerName = owner.email;
+        }
+      }
+      // Xử lý tồn kho
+      let stockStatus = '';
+      if (typeof productObj.stockQuantity === 'number') {
+        if (productObj.stockQuantity > 0) {
+          stockStatus = `Còn ${productObj.stockQuantity} sản phẩm`;
+        } else {
+          stockStatus = 'Hết hàng';
+        }
+      }
+      productObj.shopOwnerName = shopOwnerName;
+      productObj.stockStatus = stockStatus;
       
       // Add brandName for easier frontend access
       if (productObj.brand && typeof productObj.brand === 'object' && productObj.brand.name) {
